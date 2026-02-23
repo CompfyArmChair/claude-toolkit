@@ -1,0 +1,17 @@
+{
+  "name": "claude-toolkit",
+  "owner": { "name": "marti" },
+  "metadata": {
+    "description": "Agents, commands, and skills for code review, research, and development workflows",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "claude-toolkit",
+      "source": "./plugins/claude-toolkit",
+      "description": "Architecture review agents, research agents, development workflow commands, and MCP/skill design guides",
+      "version": "1.0.0"
+    }
+  ]
+}
