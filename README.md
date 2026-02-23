@@ -6,6 +6,7 @@ Agents, commands, and skills for Claude Code — covering code review, research,
 
 ### Agents
 - **architecture-reviewer** — Exhaustive architecture review against DI, configuration, layer separation, API design, and SRP rules
+- **test-reviewer** — Test code review against mocking practices, test setup patterns, and test isolation rules
 - **community-researcher** — Research how the community solves problems, surface trade-offs and real-world experience
 - **dependency-researcher** — Research library/SDK documentation from multiple sources, return focused cited reports
 - **violation-verifier** — Verify whether flagged architectural violations are real or false positives
@@ -21,6 +22,7 @@ Agents, commands, and skills for Claude Code — covering code review, research,
 - **update-architecture-rules** — Add or modify rules in the architecture-reviewer agent
 - **creating-marketplace** — Guide to setting up a Claude Code plugin marketplace
 - **creating-plugin** — Guide to creating a Claude Code plugin
+- **updating-plugin** — Checklist for modifying an existing plugin: version bumps, manifest sync, and common mistakes
 
 ## Install
 
