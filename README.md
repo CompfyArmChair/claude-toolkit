@@ -26,7 +26,7 @@ Agents, commands, and skills for Claude Code — covering code review, research,
 
 ```bash
 # Add this marketplace
-claude plugin marketplace add https://github.com/YOUR_USERNAME/claude-toolkit
+claude plugin marketplace add https://github.com/CompfyArmChair/claude-toolkit
 
 # Install the plugin
 claude plugin install claude-toolkit
