@@ -1,6 +1,6 @@
 {
   "name": "claude-toolkit",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Architecture review agents, test review agents, research agents, development workflow commands, and MCP/skill design guides",
   "author": { "name": "marti" }
 }

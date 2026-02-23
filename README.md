@@ -5,7 +5,7 @@ Agents, commands, and skills for Claude Code — covering code review, research,
 ## What's Included
 
 ### Agents
-- **architecture-reviewer** — Exhaustive architecture review against DI, configuration, layer separation, API design, and SRP rules
+- **architecture-reviewer** — Production code review against DI, configuration, layer separation, API design, naming, and SRP rules
 - **test-reviewer** — Test code review against mocking practices, test setup patterns, and test isolation rules
 - **community-researcher** — Research how the community solves problems, surface trade-offs and real-world experience
 - **dependency-researcher** — Research library/SDK documentation from multiple sources, return focused cited reports

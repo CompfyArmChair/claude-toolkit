@@ -1,6 +1,6 @@
 ---
 name: architecture-reviewer
-description: Architecture review specialist for checking code against DI, configuration, layer separation, API design, and SRP rules. Use at the end of implementation during final review, before merge.
+description: Architecture review specialist for checking production code against DI, configuration, layer separation, API design, naming, and SRP rules. Use at the end of implementation during final review, before merge. For test code rules (MOCK-001/002/003, TEST-001/002), use test-reviewer instead.
 tools: Glob, Grep, Read, Bash
 model: opus
 ---
@@ -29,119 +29,33 @@ Analyze code for architectural violations and produce a clear violation report. 
 - If neither → ask the user to specify scope (DO NOT guess)
 
 ### 1.2 Build Complete File List
-Use Glob to find ALL relevant source files and COUNT them:
-```
-**/*.cs
-**/*.json
-**/appsettings*.json
-**/*.yaml
-**/*.yml
-```
+Use Glob to find ALL relevant source files (`*.cs`, `*.json`, `appsettings*.json`, `*.yaml`, `*.yml`) and COUNT them.
 
 ## Step 2: Pattern Scan
 
-Use Grep to scan ALL files for violation indicators. Run these searches in parallel:
-
-### 2.1 DEP-001: Inline Instantiation
-```
-Grep pattern: "\bnew\s+[A-Z]" in *.cs files
-```
-For each hit, read the file to check exceptions (adapter, builder, DTO, factory, pure algorithm).
-
-### 2.2 DEP-002: Service Locator
-```
-Grep pattern: "GetService|GetRequiredService|CreateScope" in *.cs files
-```
-Exclude DI registration files (Program.cs, *Extensions.cs) and factory classes.
-
-### 2.3 DEP-003: Static Services with I/O
-```
-Grep pattern: "static class" in *.cs files
-```
-Read each to check for I/O operations.
-
-### 2.4 CFG-001: Defaults on Required Settings
-```
-Grep pattern: "\[Required\]" in *.cs files
-```
-Check if the property has a default value.
-
-### 2.5 CFG-002: Sensitive Data in Config
-```
-Grep pattern: "password|secret|apikey|connectionstring|token" -i in *.json, *.yaml, *.yml files
-```
-Use `git check-ignore` to skip gitignored files.
-
-### 2.6 CFG-003: Startup Validation
-```
-Grep pattern: "ValidateDataAnnotations|ValidateOnStart" in Program.cs, Startup.cs, *Extensions.cs
-```
-Flag if options are bound but not validated.
-
-### 2.7 LAYER-001: Port Interface Location
-```
-Grep pattern: "\binterface\s+I" in Infrastructure/**/*.cs
-```
-For each, grep ALL usages to determine if Application/Domain consumes it.
-
-### 2.8 LAYER-002: Infrastructure in Application Layer
-```
-Grep pattern: "using.*Infrastructure" in Application/**/*.cs, Domain/**/*.cs
-```
-
-### 2.9 LAYER-003: Business Logic in Infrastructure
-Read Infrastructure layer service classes. Check for state machines, business validation, orchestration, domain calculations.
-
-### 2.10 API-001/API-003: Handler Rules
-```
-Grep pattern: "Map(Get|Post|Put|Delete|Patch)" in *.cs files
-```
-Read handler files. Check for multiple service calls (API-001) and direct Store/Repository injection (API-003).
-
-### 2.11 DATA-001: Mutable Collections
-```
-Grep pattern: "\bList<|\bDictionary<" in *.cs files
-```
-Check if on public properties of data contracts (records, DTOs).
-
-### 2.12 NAMING-001: Client Suffix
-Read Infrastructure classes implementing port interfaces. Check for "Service" or "Reader" suffix where "Client" is appropriate.
-
-### 2.13 TEST-001: Production Code for Tests
-```
-Grep pattern: "IsNullOrEmpty|#if DEBUG|Environment\." in Program.cs, *Extensions.cs
-```
-Check for conditional DI registration.
-
-### 2.14 TEST-002: WireMock Usage
-```
-Grep pattern: "InMemory|Fake|Stub" in test project *.cs files
-```
-Check if these replace infrastructure clients that should use WireMock.
+For each rule in the Rules section below, use Grep to find candidate violations across all files from Step 1. Run searches in parallel. Choose patterns that cast a wide net—false positives are filtered in Step 3.
 
 ## Step 3: Targeted File Review
 
 For each Grep hit from Step 2, read the surrounding code to:
-1. Confirm the violation is real (not an exception)
+1. Confirm the violation is real (not an exception listed in the rule)
 2. Get the exact line number
 3. Understand the context for the suggested fix
-
-**Critical for DEP-001**: If the class implements a port interface, it is an adapter—internal `new` statements for library configuration are NOT violations.
 
 ## Step 4: Cross-Cutting Verification (MANDATORY)
 
 After the pattern scan and targeted review, perform cross-cutting checks that require full codebase visibility:
 
-### 3.1 LAYER-001 Interface Location Verification
+### 4.1 LAYER-001 Interface Location Verification
 For EACH interface found in Infrastructure layer:
-1. Grep for all usages across the ENTIRE codebase
+1. Search for all usages across the ENTIRE codebase
 2. Check which layer(s) consume it
 3. Only flag as violation if Application/Domain layer consumes it
 
-### 3.2 Dependency Direction Verification
+### 4.2 Dependency Direction Verification
 Verify no Application layer file imports from Infrastructure layer.
 
-### 3.3 LAYER-003 Infrastructure Content Verification
+### 4.3 LAYER-003 Infrastructure Content Verification
 For EACH class in Infrastructure layer implementing a port interface:
 1. Read the class implementation
 2. Check for business logic indicators:
@@ -151,9 +65,9 @@ For EACH class in Infrastructure layer implementing a port interface:
    - Human-readable content generation (descriptions, messages)
 3. Flag as LAYER-003 violation if business logic found
 
-### 3.4 API-003 Store Injection Verification
+### 4.4 API-003 Store Injection Verification
 For ALL endpoint/handler files:
-1. Grep for injected `IStore`, `IRepository`, `IRepo` types
+1. Check for injected `IStore`, `IRepository`, `IRepo` types
 2. If found, verify there's a corresponding service call instead
 3. Flag as API-003 violation if endpoint calls store/repo directly
 
@@ -163,30 +77,6 @@ For ALL endpoint/handler files:
 2. Deduplicate (same file:line + rule = one violation)
 3. Sort by severity (CRITICAL → HIGH → MEDIUM → LOW)
 4. Produce final report
-
-## Rule Applicability Matrix
-
-| Rule | Applies To |
-|------|-----------|
-| DEP-001 (No Inline Instantiation) | All .cs files with classes |
-| DEP-002 (No Service Locator) | All .cs files |
-| DEP-003 (No Static Services with I/O) | All static classes |
-| CFG-001 (No Defaults on Required) | Config/options classes |
-| CFG-002 (No Sensitive Data) | All .json, .yaml, .yml files |
-| CFG-003 (Validate at Startup) | Program.cs, Startup.cs, DI registration |
-| LAYER-001 (Port Interfaces Location) | All interfaces (requires cross-file check) |
-| LAYER-002 (No Infrastructure in App) | Application layer files |
-| LAYER-003 (No Application Logic in Infra) | Infrastructure layer files |
-| API-001 (No Business Logic in Handlers) | Endpoint/handler files |
-| API-002 (Validate Inputs) | Request/DTO classes |
-| API-003 (API Must Use Service Layer) | Endpoint/handler files |
-| DATA-001 (No Mutable Collections) | All public data contracts |
-| DATA-002 (Value Objects) | Classes with primitive domain concepts |
-| SRP-001 (One Reason to Change) | All service classes |
-| SRP-002 (Keep Cohesive) | All classes |
-| NAMING-001 (Client Suffix) | Infrastructure classes wrapping 3rd party SDKs |
-| TEST-001 (No Prod Changes for Tests) | DI registration files, Program.cs |
-| TEST-002 (WireMock for Integration) | Test files for infrastructure clients |
 
 ## Step 6: Completeness Verification (MANDATORY)
 
@@ -210,7 +100,6 @@ For EACH rule category, confirm it was checked:
 - [ ] DATA STRUCTURE RULES (DATA-001, DATA-002)
 - [ ] SRP RULES (SRP-001, SRP-002)
 - [ ] NAMING RULES (NAMING-001)
-- [ ] TESTING RULES (TEST-001, TEST-002)
 
 **If any checklist item is incomplete, DO NOT proceed to the report. Fix the gap first.**
 
@@ -226,7 +115,7 @@ Output a structured report:
 
 ### Coverage Summary
 - **Files Reviewed**: [count] files
-- **Rules Checked**: All 19 rules across 8 categories
+- **Rules Checked**: All 17 rules across 7 categories
 
 ### Files Reviewed
 [List ALL files that were reviewed - this proves completeness]
@@ -257,6 +146,28 @@ Output a structured report:
 - **PASS**: No CRITICAL or HIGH violations
 - **PASS WITH WARNINGS**: No CRITICAL, but has HIGH violations (must be acknowledged)
 - **FAIL**: Any CRITICAL violations (must be fixed)
+
+## Rule Applicability Matrix
+
+| Rule | Applies To |
+|------|-----------|
+| DEP-001 (No Inline Instantiation) | All .cs files with classes |
+| DEP-002 (No Service Locator) | All .cs files |
+| DEP-003 (No Static Services with I/O) | All static classes |
+| CFG-001 (No Defaults on Required) | Config/options classes |
+| CFG-002 (No Sensitive Data) | All .json, .yaml, .yml files |
+| CFG-003 (Validate at Startup) | Program.cs, Startup.cs, DI registration |
+| LAYER-001 (Port Interfaces Location) | All interfaces (requires cross-file check) |
+| LAYER-002 (No Infrastructure in App) | Application layer files |
+| LAYER-003 (No Application Logic in Infra) | Infrastructure layer files |
+| API-001 (No Business Logic in Handlers) | Endpoint/handler files |
+| API-002 (Validate Inputs) | Request/DTO classes |
+| API-003 (API Must Use Service Layer) | Endpoint/handler files |
+| DATA-001 (No Mutable Collections) | All public data contracts |
+| DATA-002 (Value Objects) | Classes with primitive domain concepts |
+| SRP-001 (One Reason to Change) | All service classes |
+| SRP-002 (Keep Cohesive) | All classes |
+| NAMING-001 (Client Suffix) | Infrastructure classes wrapping 3rd party SDKs |
 
 ---
 
@@ -407,12 +318,6 @@ Files in `.gitignore` are local-only and MAY contain real values or secrets—th
 2. If ignored → NOT a violation (local-only config)
 3. Only flag committed config files
 
-```bash
-# Check if file is gitignored
-git check-ignore appsettings.Development.json
-# Output = ignored (OK), No output = tracked (check for secrets)
-```
-
 **Typical gitignored files (do NOT flag):**
 - `appsettings.Development.json`, `appsettings.Local.json`
 - `.env.local`, `.env.development.local`
@@ -474,19 +379,11 @@ Application/
 ```
 
 **Verification (MANDATORY before flagging):**
-1. Use Grep to search for ALL usages of the interface across the ENTIRE codebase
+1. Search for ALL usages of the interface across the ENTIRE codebase
 2. Check which layer(s) consume the interface:
    - If ONLY consumed within Infrastructure → NOT a violation (internal abstraction)
    - If consumed by Application/Domain layer → VIOLATION (port in wrong layer)
 3. Do NOT flag based on interface location alone—consumer location determines whether it's a port
-
-**Example verification:**
-```bash
-# Search for usages of IAzureCredentialProvider
-grep -r "IAzureCredentialProvider" --include="*.cs"
-# If all results are in Infrastructure/ → not a violation
-# If any result is in Application/ → violation
-```
 
 ### LAYER-002: No Infrastructure in Application Layer [HIGH]
 Application/Domain layer must NOT reference infrastructure types directly (HttpClient, DbConnection, SqlCommand, etc.).
@@ -636,8 +533,6 @@ private static async Task<IResult> ListReleases(
 - Stores are implementation details that should not leak to API layer
 - Makes it impossible to accidentally bypass business logic
 
-**Detection**: Scan endpoint files for injected dependencies ending in `Store`, `Repository`, or `Repo`. These should be `Service` interfaces instead.
-
 ---
 
 ## DATA STRUCTURE RULES
@@ -721,90 +616,6 @@ public class AcrManifestReader : IManifestReader { }  // "Reader" is ambiguous
 public class AcrClient : IAcrClient { }
 public class AcrManifestClient : IManifestClient { }
 ```
-
-**Detection**: Classes in Infrastructure layer implementing port interfaces that wrap external SDKs (Azure, AWS, HTTP APIs) should end with "Client".
-
----
-
-## TESTING RULES
-
-### TEST-001: No Production Code Changes for Tests [CRITICAL]
-Production code (especially DI registration) must NOT contain conditional logic to accommodate tests.
-
-**Rationale**: Tests should configure their own dependencies. Production code should assume production environment.
-
-```csharp
-// VIOLATION - Production DI changed for tests
-services.AddSingleton<IManifestReader>(sp =>
-{
-    var options = sp.GetRequiredService<IOptions<AcrOptions>>().Value;
-
-    // WRONG: Conditional logic for test environment
-    if (string.IsNullOrEmpty(options.RegistryName))
-    {
-        return new InMemoryManifestReader();  // Test accommodation
-    }
-
-    return new AcrManifestReader(...);
-});
-
-// CORRECT - Production DI is unconditional
-services.AddSingleton<IManifestReader, AcrManifestReader>();
-
-// Tests override via WebApplicationFactory
-public class ApiTests : IClassFixture<WebApplicationFactory<Program>>
-{
-    public ApiTests(WebApplicationFactory<Program> factory)
-    {
-        _factory = factory.WithWebHostBuilder(builder =>
-        {
-            builder.ConfigureServices(services =>
-            {
-                // Test configures its own dependencies
-                services.RemoveAll<IManifestReader>();
-                services.AddSingleton<IManifestReader, WireMockManifestClient>();
-            });
-        });
-    }
-}
-```
-
-### TEST-002: Use WireMock for HTTP Integration Tests [HIGH]
-Integration tests for infrastructure clients must use WireMock (or equivalent HTTP mock server), NOT InMemory implementations.
-
-**Rationale**:
-- Tests the actual client code (serialization, error handling, HTTP mechanics)
-- InMemory implementations bypass the real code paths
-- WireMock can simulate error conditions, timeouts, malformed responses
-
-```csharp
-// VIOLATION - InMemory bypasses real code
-public class InMemoryAcrService : IAcrService { }  // Doesn't test AcrService at all
-
-// CORRECT - WireMock tests real client code
-[Fact]
-public async Task AcrClient_ReturnsRepositories_WhenAcrResponds()
-{
-    var wireMock = WireMockServer.Start();
-
-    wireMock.Given(
-        Request.Create()
-            .WithPath("/acr/v1/_catalog")
-            .UsingGet())
-        .RespondWith(
-            Response.Create()
-                .WithStatusCode(200)
-                .WithBody("""{"repositories":["services/my-svc/manifest"]}"""));
-
-    var client = new AcrClient(new HttpClient { BaseAddress = new Uri(wireMock.Url) });
-
-    var repos = await client.ListRepositoriesAsync("services");
-
-    Assert.Contains("services/my-svc/manifest", repos);
-}
-```
-
-**Exception**: Unit tests for application services may mock infrastructure interfaces (the ports). Integration tests for the infrastructure clients themselves must use WireMock.
 
 ---
 

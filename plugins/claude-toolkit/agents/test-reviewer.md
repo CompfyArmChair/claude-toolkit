@@ -29,119 +29,41 @@ Analyze test code for testing practice violations and produce a clear violation 
 - If neither → ask the user to specify scope (DO NOT guess)
 
 ### 1.2 Build Complete File List
-Use Glob to find ALL relevant source files and COUNT them:
-```
-**/*.Tests/**/*.cs
-**/*.Test/**/*.cs
-**/Tests/**/*.cs
-**/Test/**/*.cs
-**/*Tests.cs
-**/*Test.cs
-```
+Use Glob to find ALL test project source files (`*.cs` in test projects) and COUNT them.
 
-Also find production DI registration files (needed for TEST-001):
-```
-**/Program.cs
-**/*Extensions.cs
-**/Startup.cs
-```
+Also find production DI registration files (needed for TEST-001): `Program.cs`, `*Extensions.cs`, `Startup.cs`.
 
 ## Step 2: Pattern Scan
 
-Use Grep to scan ALL files for violation indicators. Run these searches in parallel:
-
-### 2.1 MOCK-001: Custom Test Doubles
-```
-Grep pattern: "class\s+(InMemory|Fake|Stub|Mock|Dummy|Test)[A-Z]" in test *.cs files
-```
-For each hit, read the file to determine if NSubstitute/Moq would suffice. Check for justifications:
-- Complex stateful behavior that would require extensive mock setup
-- Shared test infrastructure used across many test classes
-- Significant readability benefit over framework mocks
-
-### 2.2 MOCK-002: Repeated Mock Setup
-```
-Grep pattern: "Substitute\.For<|new Mock<|\.Setup\(|\.Returns\(" in test *.cs files
-```
-Collect mock setup patterns per interface across test files. Flag when the same interface is configured with the same pattern in 2+ test classes without an extension method.
-
-### 2.3 MOCK-003: Mocking Branches Instead of Leaves
-```
-Grep pattern: "Substitute\.For<I[A-Z]|new Mock<I[A-Z]" in test *.cs files
-```
-For each mocked interface:
-1. Determine if it represents a leaf (I/O boundary) or a branch (intermediate service)
-2. Check if the interface wraps HTTP, database, file system, or external APIs → leaf (OK)
-3. Check if the interface is your own service that uses other interfaces → branch (VIOLATION)
-
-**Leaf interfaces (OK to mock):**
-- `HttpClient`, `IHttpClientFactory`, HTTP message handlers
-- Database interfaces (`IDbConnection`, `IRepository`, `IStore`)
-- File system interfaces (`IFileSystem`, `IFileProvider`)
-- External API clients (`IAcrClient`, `IEmailClient`, etc.)
-- `IOptions<T>`, `ILogger<T>`, `IConfiguration`
-
-**Branch interfaces (should use real implementation with mocked leaves):**
-- Your own service interfaces (`IOrderService`, `IReleaseManifestService`)
-- Validators, mappers, or orchestrators that contain business logic
-- Any interface whose implementation you wrote and want to test
-
-### 2.4 TEST-001: Production Code Changes for Tests
-```
-Grep pattern: "IsNullOrEmpty|#if DEBUG|Environment\." in Program.cs, *Extensions.cs, Startup.cs
-```
-Check for conditional DI registration that accommodates tests instead of using proper test overrides.
-
-### 2.5 TEST-002: InMemory/Fake Infrastructure Replacements
-```
-Grep pattern: "InMemory|Fake|Stub" in test *.cs files
-```
-Check if these replace infrastructure clients that should use WireMock or equivalent HTTP mock servers.
+For each rule in the Rules section below, use Grep to find candidate violations across all files from Step 1. Run searches in parallel. Choose patterns that cast a wide net—false positives are filtered in Step 3.
 
 ## Step 3: Targeted File Review
 
 For each Grep hit from Step 2, read the surrounding code to:
-1. Confirm the violation is real (not an exception)
+1. Confirm the violation is real (not an exception listed in the rule)
 2. Get the exact line number
 3. Understand the context for the suggested fix
-
-### Critical Verification for MOCK-001
-Before flagging a custom test double:
-1. Check if it has complex stateful behavior (tracking calls, maintaining state across operations)
-2. Check if it's used across many test classes as shared infrastructure
-3. Check if replacing it with framework mocks would require excessive setup (10+ lines per test)
-If any of these apply, it is NOT a violation—note it as an acceptable exception.
-
-### Critical Verification for MOCK-003
-Before flagging a mocked interface as a branch:
-1. Find the interface definition and its implementation
-2. Check if the implementation has its own constructor dependencies (sign of a branch)
-3. Check if the implementation performs I/O (sign of a leaf)
-4. If the implementation only orchestrates other services → it's a branch (flag it)
-5. If the implementation directly calls external systems → it's a leaf (don't flag)
 
 ## Step 4: Cross-Cutting Checks (MANDATORY)
 
 After the pattern scan and targeted review, perform cross-cutting checks:
 
 ### 4.1 MOCK-002 Cross-File Duplication Check
-For the top 5 most-mocked interfaces found in Step 2.2:
+For the most-mocked interfaces found in Step 2:
 1. Collect all mock setup code for each interface across all test files
 2. Compare setup patterns—if 2+ test classes configure the same interface the same way, flag as MOCK-002
-3. Check if extension methods already exist for these interfaces (search for `public static.*this.*Substitute|this.*Mock<`)
+3. Check if extension methods already exist for these interfaces
 
 ### 4.2 TEST-001 DI Registration Audit
 For EACH DI registration file (Program.cs, *Extensions.cs):
 1. Read the full file
-2. Check for `string.IsNullOrEmpty`, `string.IsNullOrWhiteSpace` guards around service registration
-3. Check for `#if DEBUG` or `#if TEST` preprocessor directives
-4. Check for `Environment.GetEnvironmentVariable` checks that switch implementations
-5. Flag any conditional logic that appears to accommodate test environments
+2. Check for conditional logic that appears to accommodate test environments
+3. Flag any guards, preprocessor directives, or environment checks that switch implementations
 
 ### 4.3 TEST-002 Integration Test Verification
 For test files that contain `WebApplicationFactory`, `TestServer`, or integration test base classes:
 1. Check what services are replaced in `ConfigureTestServices` or `ConfigureServices`
-2. If infrastructure clients are replaced with `InMemory*`, `Fake*`, or `Stub*` → flag as TEST-002
+2. If infrastructure clients are replaced with in-memory or fake implementations → flag as TEST-002
 3. If replaced with WireMock-backed implementations → OK
 
 ## Step 5: Completeness Verification (MANDATORY)
@@ -207,6 +129,12 @@ Output a structured report:
 [Brief explanation of verdict]
 ```
 
+## Verdict Criteria
+
+- **PASS**: No CRITICAL or HIGH violations
+- **PASS WITH WARNINGS**: No CRITICAL, but has HIGH violations (must be acknowledged)
+- **FAIL**: Any CRITICAL violations (must be fixed)
+
 ## Rule Applicability Matrix
 
 | Rule | Applies To |
@@ -251,10 +179,6 @@ repo.GetAsync("order-1", Arg.Any<CancellationToken>())
 2. **Shared test infrastructure**: Used across many test classes as a common fixture
 3. **Significant readability benefit**: The test double makes tests dramatically clearer than framework mocks would
 
-### Detection
-
-Search for classes named `InMemory*`, `Fake*`, `Stub*`, `Mock*`, `Dummy*` in test projects. For each, assess whether NSubstitute/Moq would produce equivalent test coverage with less code.
-
 ---
 
 ## MOCK-002: Use Extension Methods for Test Setup [MEDIUM]
@@ -295,10 +219,6 @@ var client = Substitute.For<IAcrClient>().WithNoManifest();
 - **Place in test project**: Usually in a `TestExtensions` or `Mocks` folder
 - **One file per interface**: `AcrClientExtensions.cs`, `ServiceClientExtensions.cs`
 
-### Detection
-
-For the most-mocked interfaces, compare setup code across test files. If the same `.Returns()` / `.Setup()` pattern appears in 2+ test classes, flag it.
-
 ---
 
 ## MOCK-003: Mock at the Leaves, Not the Branches [HIGH]
@@ -332,6 +252,14 @@ var sut = new DeploymentValidator(catalogueService);
 | File system access | Services that read/write files |
 | External API clients | Your wrappers around those clients |
 | `IOptions<T>`, `ILogger<T>` | Your own validators, mappers |
+
+### Verification (MANDATORY before flagging)
+
+1. Find the interface definition and its implementation
+2. Check if the implementation has its own constructor dependencies (sign of a branch)
+3. Check if the implementation performs I/O (sign of a leaf)
+4. If the implementation only orchestrates other services → it's a branch (flag it)
+5. If the implementation directly calls external systems → it's a leaf (don't flag)
 
 ### Exceptions
 
@@ -370,13 +298,12 @@ builder.ConfigureServices(services =>
 });
 ```
 
-### Detection
+### What to look for in DI registration files
 
-Search DI registration files for:
-- `string.IsNullOrEmpty` / `string.IsNullOrWhiteSpace` guards
+- `string.IsNullOrEmpty` / `string.IsNullOrWhiteSpace` guards around service registration
 - `#if DEBUG` / `#if TEST` preprocessor directives
-- `Environment.GetEnvironmentVariable` switching implementations
-- Conditional logic that selects between real and fake implementations
+- `Environment.GetEnvironmentVariable` checks that switch implementations
+- Any conditional logic that selects between real and fake implementations
 
 ---
 
