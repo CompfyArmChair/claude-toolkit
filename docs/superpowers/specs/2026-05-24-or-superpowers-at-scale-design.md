@@ -6,6 +6,8 @@ _Revised 2026-05-25 (later): added the Phase-1/2 anti-drift resume discipline (f
 
 _Revised 2026-05-30: re-homed into the **`claude-toolkit` plugin** (repo `I:\Dev\claude-toolkit`, marketplace `claude-toolkit`, GitHub `CompfyArmChair/claude-toolkit`) instead of loose `~/.claude/`. All assets are now `claude-toolkit:*` plugin components; the three research skills are genuinely shared with the plugin's existing `dependency-researcher` / `community-researcher` (refactored to thin wrappers, extracted from the **plugin's** canonical copies — the `~/.claude/agents/` copies are stale legacy, out of scope). Subagent types and in-body skill references are plugin-qualified (`claude-toolkit:or-*`). Spec + plans now live in the repo under `docs/superpowers/`. See the new **Plugin Packaging** section, which is authoritative wherever it touches homes, namespaces, release, or git._
 
+_Revised 2026-05-30 (later): reconciled the Release-discipline wording — the orchestrator ships as a **single** minor release (`1.1.1 → 1.2.0`) finalized in the Plan 4 release step, not a bump per plan; Plans 1–3 commit components without manifest churn. Added the **Cutover & end-state validation** subsection: the loose `~/.claude` copies are deprecated; on completion, remove them, install the plugin, then run the deferred behavioral validation against the installed plugin._
+
 ## Goal
 
 A single Claude Code skill that orchestrates the full superpowers workflow end-to-end in one session: **brainstorm → plan → implement**, with manager context preserved throughout by delegating each phase to a dedicated teammate agent the user talks to directly.
@@ -58,18 +60,22 @@ The plugin's `agents/dependency-researcher.md` and `agents/community-researcher.
 
 ### Release discipline (per the `updating-plugin` skill)
 
-This is a plugin **update**, not a new plugin. Each plan's final task bumps versions and syncs the marketplace:
+This is a plugin **update**, not a new plugin, and the whole orchestrator ships as a **single minor release**. The version bump + marketplace sync + README update + push happen **once**, in the suite's final plan (Plan 4) as a dedicated release step gated on user approval — **not** once per plan. Plans 1–3 commit their components to the feature branch with **no** manifest/version/README churn (nothing is user-visible until the release push). That release step:
 
-- `plugins/claude-toolkit/.claude-plugin/plugin.json` → bump `version` + update `description`.
+- `plugins/claude-toolkit/.claude-plugin/plugin.json` → bump `version` `1.1.1 → 1.2.0` + update `description`.
 - `.claude-plugin/marketplace.json` → bump **both** `metadata.version` and `plugins[].version` (kept equal to `plugin.json`).
-- Update the repo `README.md` component listing.
+- Update the repo `README.md` component listing (all new components added at once).
 - Commit and push (users update via `claude plugin update`).
 
-Net bump for the whole orchestrator: `1.1.1 → 1.2.0` (minor — new components), finalized at release.
+Net bump for the whole orchestrator: `1.1.1 → 1.2.0` (minor — new components), finalized at the Plan 4 release.
 
 ### Git workflow
 
 Work happens on a feature branch **`or-superpowers-at-scale`** in `I:\Dev\claude-toolkit`, with a commit per task. The repo is real git, so the SDD review/rollback loop applies — this **supersedes** any "no-repo checkpoint" note in the plans. Docs (this spec + the plan suite) live in the repo under `docs/superpowers/{specs,plans}/`.
+
+### Cutover & end-state validation
+
+The loose `~/.claude` copies the plugin supersedes — the drifted `agents/{dependency,community}-researcher.md`, and the loose `design` / `plan-from-design` / `subagent-driven-development-at-scale` assets — are **deprecated** in favour of the plugin. On suite completion (after the Plan 4 release): remove the deprecated loose copies, install the plugin (`claude plugin install claude-toolkit`), and only then run the **behavioral validation** that Plans 1–3 defer — live `Skill()` load, an agent dispatch that returns a cited report, and the impl-note #3/#10/#11 teammate spikes — against the *installed* plugin. Until install, verification is **structural** (`claude plugin validate` + content greps): the components are not live in the authoring session, so a live test there would exercise the stale loose copies, not the plugin files.
 
 ---
 

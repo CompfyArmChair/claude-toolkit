@@ -30,11 +30,11 @@ Out of scope (later plans): the `or-dependency-researcher` / `or-community-resea
 - The working directory is `C:\Users\marti\.claude` (a different drive from the repo). **Every git command targets the repo explicitly via `git -C I:\Dev\claude-toolkit …`** — do not rely on the ambient cwd, and do not `cd` (it can trigger a permission prompt).
 - Do **not** `git push` in this plan. The branch stays local until the whole suite is reviewed and the user approves a release (design handover: push only when asked).
 
-## Release deferral (resolves a spec inconsistency — confirm at review)
+## Release deferral (resolved — user-confirmed 2026-05-30)
 
 The design's Plugin Packaging section says two things that don't fully reconcile: "*each plan's final task bumps versions and syncs the marketplace*" **and** "*Net bump for the whole orchestrator: 1.1.1 → 1.2.0 (minor — new components), finalized at release*." Four plans each doing a minor bump would land at 1.5.0, not a single net minor.
 
-**Resolution adopted here:** treat the whole orchestrator as a single minor increment. **No version/manifest/README change in Plan 1** (or Plans 2–3). The one-time bump `1.1.1 → 1.2.0` + `marketplace.json` sync (both `metadata.version` and `plugins[].version`) + README component listing + `git push` is a dedicated **release step in Plan 4**, executed only on user approval. This honors the unambiguous "net 1.2.0, finalized at release" and "push only when asked." ⚠️ **Flag at review:** if you instead want per-plan patch bumps (1.1.2 → 1.1.3 → …), say so and Plan 1's final task gains a bump step; otherwise the spec's "each plan bumps" wording should be reconciled to "the suite's release bumps."
+**Resolution adopted here:** treat the whole orchestrator as a single minor increment. **No version/manifest/README change in Plan 1** (or Plans 2–3). The one-time bump `1.1.1 → 1.2.0` + `marketplace.json` sync (both `metadata.version` and `plugins[].version`) + README component listing + `git push` is a dedicated **release step in Plan 4**, executed only on user approval. This honors the unambiguous "net 1.2.0, finalized at release" and "push only when asked." **User-confirmed 2026-05-30**, and the spec's Release-discipline wording has been reconciled to match (single suite release; Plans 1–3 commit components without manifest churn).
 
 ## Source-of-truth references
 
@@ -52,7 +52,7 @@ All paths above are relative to the plugin root `I:\Dev\claude-toolkit\plugins\c
 
 ## Verification approach (why no live `Skill()` / dispatch gate)
 
-The `claude-toolkit` marketplace is **not installed in the authoring session** (design handover). So an in-session `Skill('claude-toolkit:research-deposit')` would not load the file we just wrote, and dispatching `subagent_type: dependency-researcher` would hit the stale loose `~/.claude` copy, not the refactored plugin file — a live test here would validate the wrong thing or fail spuriously. Plan 1's **hard gates are therefore structural** (frontmatter validity + content-move greps, run against the repo files) **plus `claude plugin validate`** (Task 4). End-to-end behavioral validation of the wrappers happens at install time and overlaps the design's impl-note #3 spike (the in-body skill-load-on-a-teammate check, scheduled for Plan 2); it is intentionally **not** a Plan 1 gate.
+The `claude-toolkit` marketplace is **not installed in the authoring session** (design handover). So an in-session `Skill('claude-toolkit:research-deposit')` would not load the file we just wrote, and dispatching `subagent_type: dependency-researcher` would hit the stale loose `~/.claude` copy, not the refactored plugin file — a live test here would validate the wrong thing or fail spuriously. Plan 1's **hard gates are therefore structural** (frontmatter validity + content-move greps, run against the repo files) **plus `claude plugin validate`** (Task 4). End-to-end behavioral validation of the wrappers happens at install time and overlaps the design's impl-note #3 spike (the in-body skill-load-on-a-teammate check, scheduled for Plan 2); it is intentionally **not** a Plan 1 gate. The `~/.claude` copies are **deprecated**; on suite completion they are removed, the plugin is installed, and the deferred behavioral validation runs then against the *installed* plugin (user-confirmed 2026-05-30; see spec §"Cutover & end-state validation").
 
 ---
 
