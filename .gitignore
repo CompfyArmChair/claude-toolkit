@@ -15,3 +15,7 @@ node_modules/
 
 # Git worktrees
 .worktrees/
+
+# Local session/orchestration artifacts (machine-local, not branch deliverables)
+.claude/
+docs/superpowers/handovers/
