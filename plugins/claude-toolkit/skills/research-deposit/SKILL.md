@@ -1,6 +1,6 @@
 ---
 name: research-deposit
-description: Use when you are a deposit-aware research agent whose spawn prompt includes a "DEPOSIT: <path>" parameter — defines how to write full findings to disk and signal completion to the dispatching parent with a single minimal token. Not a trigger to start research; it governs how research output is delivered.
+description: 'Use when you are a deposit-aware research agent whose spawn prompt includes a "DEPOSIT: <path>" parameter — defines how to write full findings to disk and signal completion to the dispatching parent with a single minimal token. Not a trigger to start research; it governs how research output is delivered.'
 ---
 
 # Research Deposit Protocol
