@@ -4,7 +4,7 @@
 
 **Goal:** Finalize the five remaining Phase-3 teammate agents (`or-supervisor`, `or-implementer`, `or-spec-reviewer`, `or-code-quality-reviewer`, `or-final-reviewer`) from their reviewed drafts into the plugin's `agents/` directory; author the two deposit-aware research teammates (`or-dependency-researcher`, `or-community-researcher`) from the design's "Research agent body" template; and author the orchestrator skill's eleven `assets/*` templates (spawn-context, handover, and protocol-reference files) — so the implementation tier and the skill's referenced assets exist on the branch, leaving only the manager-discipline `SKILL.md` body and the release for Plan 4.
 
-**Architecture:** Four reviewed drafts moved verbatim (`git mv`) from `docs/superpowers/drafts/` to `plugins/claude-toolkit/agents/` (single source of truth — the draft is the final body). One draft (`or-supervisor`) moved the same way plus a surgical normalization of two stale `~/.claude/...` asset references to the skill-relative form its sibling phase agents already use. Two new research agent bodies authored fresh from the design template. Eleven new asset files authored under `skills/or-superpowers-at-scale/assets/`: five tiny spawn-context templates and two phase handover templates (NEW, content pinned in the design); one iteration handover template (PRESERVED from the legacy skill with `or-*` naming normalization); one manager handover template (ADAPTED — adds two phase fields); and two protocol references — `spawn-protocol.md` (ADAPTED — preserves SPAWN, adds SPAWN_RESEARCH) and `preflight-brief.md` (ADAPTED — adds mode detection + worktree prompting).
+**Architecture:** Five reviewed drafts moved verbatim (`git mv`) from `docs/superpowers/drafts/` to `plugins/claude-toolkit/agents/` (single source of truth — the draft is the final body, with no edit during the move). All five — `or-supervisor` included — reference the orchestrator's protocols and handover templates by invoking `Skill('claude-toolkit:or-superpowers-at-scale')` (the install-agnostic form their drafts already carry, per the pre-suite skill-invocation rework), so each is a pure relocation. Two new research agent bodies authored fresh from the design template. Eleven new asset files authored under `skills/or-superpowers-at-scale/assets/`: five tiny spawn-context templates and two phase handover templates (NEW, content pinned in the design); one iteration handover template (PRESERVED from the legacy skill with `or-*` naming normalization); one manager handover template (ADAPTED — adds two phase fields); and two protocol references — `spawn-protocol.md` (ADAPTED — preserves SPAWN, adds SPAWN_RESEARCH) and `preflight-brief.md` (ADAPTED — adds mode detection + worktree prompting).
 
 **Tech Stack:** Claude Code plugin components — Markdown files with YAML frontmatter (agents) and plain Markdown templates (assets), inside the `claude-toolkit` plugin repo (`I:\Dev\claude-toolkit`, real git). No compiled code. Verification is by structural assertion (frontmatter/content greps, rename detection, line-count equality) plus `claude plugin validate`; all behavioral validation is deferred to suite cutover (the plugin is not installed in the authoring session). Per-task `git commit` is the rollback boundary.
 
@@ -16,7 +16,7 @@ This is the **implementation-tier + assets** plan of the `or-superpowers-at-scal
 
 In scope:
 - **Finalize four worker agents** (verbatim `git mv` from reviewed drafts): `or-implementer`, `or-spec-reviewer`, `or-code-quality-reviewer`, `or-final-reviewer`.
-- **Finalize `or-supervisor`** (`git mv` + a two-line asset-path normalization — see "Source-of-truth references" and Task 2).
+- **Finalize `or-supervisor`** (verbatim `git mv` — its draft already invokes the orchestrator skill for protocol/template refs; see Task 2).
 - **Author two research teammates** (NEW, from the design's "Research agent body" template): `or-dependency-researcher`, `or-community-researcher`.
 - **Author eleven `assets/*` files** under `plugins/claude-toolkit/skills/or-superpowers-at-scale/assets/`:
   - Spawn-context (5, NEW): `brainstormer-spawn-context.md`, `plan-writer-spawn-context.md`, `supervisor-spawn-context.md`, `implementer-spawn-context.md`, `reviewer-spawn-context.md`.
@@ -36,7 +36,7 @@ Out of scope (Plan 4 / cutover):
 `I:\Dev\claude-toolkit` **is a real git repository** (verified). All work happens on the existing feature branch **`or-superpowers-at-scale`** with **one commit per task** (design §"Git workflow"). The real-git review/rollback loop is the SDD rollback boundary.
 
 - The working directory is `C:\Users\marti\.claude` (a different drive from the repo). **Every git command targets the repo explicitly via `git -C I:\Dev\claude-toolkit …`** — do not rely on the ambient cwd, and do not `cd` (it can trigger a permission prompt).
-- Use **`git mv`** for the five agent finalizations — it moves the file in one tracked operation, preserving history. Four are byte-identical moves (no body edit); `or-supervisor` is moved and then has two lines surgically edited (see Task 2). Do **not** hand-copy any body.
+- Use **`git mv`** for the five agent finalizations — it moves the file in one tracked operation, preserving history. All five are byte-identical moves (no body edit). Do **not** hand-copy any body.
 - Do **not** `git push` in this plan. The branch stays local until the whole suite is reviewed and the user approves the release (design handover: push only when asked; the push *is* the suite release).
 
 ## Release deferral (carried from Plans 1–2 — user-confirmed 2026-05-30)
@@ -45,7 +45,7 @@ The whole orchestrator ships as a **single** minor increment `1.1.1 → 1.2.0`, 
 
 ## Verification approach (why every behavioral check is deferred)
 
-The `claude-toolkit` marketplace is **not installed in the authoring session** (design handover; confirmed in Plans 1–2). So the finalized agents are not live `claude-toolkit:or-*` subagent types here, and the skill's assets are not loadable by a teammate. **Plan 3's hard gates are therefore structural** — `claude plugin validate` + frontmatter/content greps + rename detection + line-count equality, run against the repo files. **Every behavioral check is deferred** to suite cutover (after the Plan 4 release), run against the *installed* plugin (`claude plugin install claude-toolkit`) — that deferred set is the five spikes authored in Plan 2 plus Plan 1's deferred wrapper check (see the behavioral-spikes doc's "Cutover checklist" and design §"Cutover & end-state validation"). In particular, the in-body `Skill('claude-toolkit:…')` load mechanism (impl-note #3) and whether teammate-relative `assets/...` references resolve at runtime are confirmed there, uniformly, for **all** agents — including the two research bodies and the normalized supervisor authored here.
+The `claude-toolkit` marketplace is **not installed in the authoring session** (design handover; confirmed in Plans 1–2). So the finalized agents are not live `claude-toolkit:or-*` subagent types here, and the skill's assets are not loadable by a teammate. **Plan 3's hard gates are therefore structural** — `claude plugin validate` + frontmatter/content greps + rename detection + line-count equality, run against the repo files. **Every behavioral check is deferred** to suite cutover (after the Plan 4 release), run against the *installed* plugin (`claude plugin install claude-toolkit`) — that deferred set is the five spikes authored in Plan 2 plus Plan 1's deferred wrapper check (see the behavioral-spikes doc's "Cutover checklist" and design §"Cutover & end-state validation"). In particular, the in-body `Skill('claude-toolkit:…')` load mechanism (impl-note #3) — including whether a teammate that invokes `Skill('claude-toolkit:or-superpowers-at-scale')` can reach the orchestrator's bundled `assets/*` content — is confirmed there, uniformly, for **all** agents, including the two research bodies and the supervisor authored here.
 
 ## Source-of-truth references
 
@@ -55,7 +55,7 @@ The `claude-toolkit` marketplace is **not installed in the authoring session** (
 | `agents/or-spec-reviewer.md` | `docs/superpowers/drafts/or-spec-reviewer.md` | Verbatim **move**. |
 | `agents/or-code-quality-reviewer.md` | `docs/superpowers/drafts/or-code-quality-reviewer.md` | Verbatim **move**. |
 | `agents/or-final-reviewer.md` | `docs/superpowers/drafts/or-final-reviewer.md` | Verbatim **move**. |
-| `agents/or-supervisor.md` | `docs/superpowers/drafts/or-supervisor.md` | **Move + two-line normalization** — see "or-supervisor asset-path normalization" below. |
+| `agents/or-supervisor.md` | `docs/superpowers/drafts/or-supervisor.md` | Verbatim **move** (`git mv`). No body edit — the draft already invokes the skill for its protocol/template refs. |
 | `agents/or-dependency-researcher.md` | Design §"Research agent body" template + Agent Inventory tool grants | NEW — inlined in full in Task 3. |
 | `agents/or-community-researcher.md` | Design §"Research agent body" template + Agent Inventory tool grants | NEW — inlined in full in Task 3. |
 | `assets/{brainstormer,plan-writer,supervisor,implementer,reviewer}-spawn-context.md` | Design §"Spawn-context templates" | NEW — pinned content inlined in Task 4. |
@@ -65,21 +65,15 @@ The `claude-toolkit` marketplace is **not installed in the authoring session** (
 | `assets/spawn-protocol.md` | Legacy `…/assets/spawn-protocol.md` + design §"SPAWN_RESEARCH protocol" | ADAPTED — inlined in Task 6. |
 | `assets/preflight-brief.md` | Legacy `…/assets/preflight-brief.md` + design §"Mode Detection" + §"Phase flow" Phase 0 | ADAPTED — inlined in Task 6. |
 
-All plugin paths are relative to the plugin root `I:\Dev\claude-toolkit\plugins\claude-toolkit\`. The five draft source files are the **reviewed, authoritative** agent bodies — they already encode every spec decision (no `Agent` tool anywhere; `Skill` only where a skill is loaded in-body; read-only reviewers keep `SendMessage`; `or-implementer` carries no `model:`). **Four bodies are not edited during the move** (Tasks 1).
+All plugin paths are relative to the plugin root `I:\Dev\claude-toolkit\plugins\claude-toolkit\`. The five draft source files are the **reviewed, authoritative** agent bodies — they already encode every spec decision (no `Agent` tool anywhere; `Skill` only where a skill is loaded in-body — including the in-body `Skill('claude-toolkit:or-superpowers-at-scale')` invocation each phase/supervisor agent uses for orchestrator protocol/template refs; read-only reviewers keep `SendMessage`; `or-implementer` carries no `model:`). **None of the five bodies are edited during the moves** (Tasks 1–2).
 
-### Why the four worker bodies are moved, not re-inlined
+### Why the five reviewed bodies are moved, not re-inlined
 
-The body is reviewed content that already exists verbatim in a committed repo file. Re-typing it into this plan would invite transcription drift and create a second copy of the very thing being finalized. `git mv` relocates the exact bytes and preserves history; verification is by frontmatter/anchor greps + rename detection + line-count equality. (Same deliberate exception Plans 1–2 made for verbatim moves.)
+The body is reviewed content that already exists verbatim in a committed repo file. Re-typing it into this plan would invite transcription drift and create a second copy of the very thing being finalized. `git mv` relocates the exact bytes and preserves history; verification is by frontmatter/anchor greps + rename detection + line-count equality. (Same deliberate exception Plans 1–2 made for verbatim moves.) This applies to all five finalized here — the four workers **and** `or-supervisor`.
 
-### `or-supervisor` asset-path normalization (the one body edit)
+### Agents invoke the skill for protocol/template refs (no body edits here)
 
-The `or-supervisor` draft was written 2026-05-25, **before** the 2026-05-30 plugin re-homing. It references its two assets with **absolute, now-stale paths**:
-- L89: ``Full mechanics + edge cases: `~/.claude/skills/or-superpowers-at-scale/assets/spawn-protocol.md`.``
-- L141: ``the template at: `~/.claude/skills/or-superpowers-at-scale/assets/iteration-handover-template.md` ``
-
-After re-homing, those assets live in the plugin (`plugins/claude-toolkit/skills/or-superpowers-at-scale/assets/`), and when the plugin is installed the literal `~/.claude/skills/or-superpowers-at-scale/` path does not exist — so these references would not resolve. The **two sibling phase agents already in `agents/`** (`or-brainstormer`, `or-plan-writer`, finalized in Plan 2) reference the very same assets in the **skill-relative** form (e.g. ``the skill's `assets/spawn-protocol.md` ``), which is install-location-agnostic and is the convention Plan 2 shipped. The `or-implementer` and three reviewer drafts reference no assets at all (verified — no `~/.claude`/`assets/` references).
-
-**Decision (documented for review):** when finalizing `or-supervisor`, normalize its two asset references to the skill-relative form its siblings already use. This is not a new convention — it aligns the lone outlier to the already-approved sibling convention, removes two definitely-broken absolute paths, and is squarely in line with the spec's re-homing intent (design revision 2026-05-30: "in-body references are plugin-qualified"; by analogy, in-body asset references must be plugin-correct). It is the only deviation from a pure byte-faithful move in this plan, and is confined to two lines. Everything else in the supervisor body is unchanged. The post-edit verification asserts zero `~/.claude` references remain and the two skill-relative references are present.
+All five drafts — like the two phase agents Plan 2 finalized — reach the orchestrator's SPAWN protocol and handover templates by invoking `Skill('claude-toolkit:or-superpowers-at-scale')` (the in-body form of the `/` command), never by an `assets/...` path or an absolute `~/.claude/...` path. This is install-agnostic and is the load path the whole design rests on for teammates (design §"Skill loading mechanism"). The supervisor draft once carried stale absolute `~/.claude/skills/or-superpowers-at-scale/assets/...` paths (written 2026-05-25, before the 2026-05-30 re-homing); the **pre-suite skill-invocation rework** corrected those — and the equivalent refs in `or-brainstormer`/`or-plan-writer` — to the skill invocation, at the drafts, before this suite runs. Consequently **every** finalization in this plan — `or-supervisor` included — is a pure byte-faithful `git mv` with no body edit. Verification asserts each phase/supervisor agent carries the `Skill('claude-toolkit:or-superpowers-at-scale')` invocation and **zero** `~/.claude` or `assets/*.md` path references. (The four worker drafts — `or-implementer` + three reviewers — reference no orchestrator assets at all.)
 
 ### `spawn-protocol.md` scope (SPAWN + SPAWN_RESEARCH; SHUTDOWN deferred to Plan 4)
 
@@ -176,26 +170,27 @@ Expected: one commit on `or-superpowers-at-scale` containing four renames (draft
 
 ---
 
-## Task 2: Finalize `or-supervisor` (move + asset-path normalization)
+## Task 2: Finalize `or-supervisor` (verbatim move)
 
-Move the reviewed `or-supervisor` draft into `agents/` via `git mv`, then surgically normalize its two stale `~/.claude/...` asset references to the skill-relative form its sibling phase agents already use (see "or-supervisor asset-path normalization" above). This is the suite's orchestration-tier agent and the only body edited in this plan, so it gets its own task and commit. Unlike Task 1, this is **not** an R100 rename — the two-line edit makes it a rename-with-modification.
+Move the reviewed `or-supervisor` draft into `agents/` via `git mv` — a pure byte-faithful relocation. Its draft already invokes `Skill('claude-toolkit:or-superpowers-at-scale')` for the SPAWN protocol and the iteration-handover template (the pre-suite skill-invocation rework applied this across every draft before the suite runs), so no body edit is needed. This is the suite's orchestration-tier agent, so it gets its own task and commit — separate from the four workers in Task 1; like them, it is an R100 rename.
 
 **Files:**
 - Move: `docs/superpowers/drafts/or-supervisor.md` → `plugins/claude-toolkit/agents/or-supervisor.md`
-- Modify (after move): two asset-reference lines in `plugins/claude-toolkit/agents/or-supervisor.md`
 
-- [ ] **Step 1: Verify the source draft exists, the destination does not, and capture the stale-path baseline (RED)**
+- [ ] **Step 1: Verify the source exists, the destination does not, capture the line-count baseline, and confirm the draft is in its post-rework state (RED)**
 
 ```powershell
 $src = "I:\Dev\claude-toolkit\docs\superpowers\drafts\or-supervisor.md"
 $dst = "I:\Dev\claude-toolkit\plugins\claude-toolkit\agents\or-supervisor.md"
 Test-Path $src                                                                        # expect True
 Test-Path $dst                                                                        # expect False
-(Get-Content $src | Measure-Object -Line).Lines                                       # record (≈103)
-# the two stale absolute references that must be normalized — expect exactly two matches
-Select-String -Path $src -Pattern '~/\.claude/skills/or-superpowers-at-scale/assets/' | Select-Object LineNumber,Line
+(Get-Content $src | Measure-Object -Line).Lines                                       # record N (the move must preserve it exactly)
+# confirm the draft already invokes the orchestrator skill (skill-invocation rework) — expect exactly two
+Select-String -Path $src -Pattern "Skill\('claude-toolkit:or-superpowers-at-scale'\)" | Select-Object LineNumber
+# and carries NO stale asset path of either form — expect NO match
+Select-String -Path $src -Pattern '~/\.claude/skills/','assets/.*\.md'
 ```
-Expected: `True`, then `False`; line count ≈103; **exactly two** matches for the stale `~/.claude/skills/or-superpowers-at-scale/assets/` path (the `spawn-protocol.md` reference and the `iteration-handover-template.md` reference). This is the RED baseline — these two references are what the edit removes.
+Expected: `True`, then `False`; record the line count (before==after is the integrity gate — robust regardless of the absolute number, which `Measure-Object` under-reports on these drafts). **Exactly two** `Skill('claude-toolkit:or-superpowers-at-scale')` invocations (the SPAWN-protocol reference + the iteration-handover-template reference); **zero** `~/.claude/skills/` and **zero** `assets/*.md` path matches. This confirms the source is the already-corrected draft, so the move is a pure relocation.
 
 - [ ] **Step 2: Move `or-supervisor.md` with `git mv`**
 
@@ -204,48 +199,23 @@ git -C I:\Dev\claude-toolkit mv docs/superpowers/drafts/or-supervisor.md plugins
 ```
 Expected: no output (success). The file is staged as a rename.
 
-- [ ] **Step 3: Normalize the two asset references to the skill-relative form**
-
-In `plugins/claude-toolkit/agents/or-supervisor.md`, make exactly these two edits (the surrounding text is unchanged; only the path token changes, matching the `or-brainstormer`/`or-plan-writer` convention):
-
-Edit A — the SPAWN-protocol pointer:
-```
-Full mechanics + edge cases: `~/.claude/skills/or-superpowers-at-scale/assets/spawn-protocol.md`.
-```
-becomes
-```
-Full mechanics + edge cases: the skill's `assets/spawn-protocol.md`.
-```
-
-Edit B — the iteration-handover-template pointer (the line beginning `~/.claude/skills/...`, immediately after "Write `<HANDOVER_DIR>/iteration-<N>.md` using the template at:"):
-```
-   `~/.claude/skills/or-superpowers-at-scale/assets/iteration-handover-template.md`
-```
-becomes
-```
-   the skill's `assets/iteration-handover-template.md`
-```
-
-Make these with the `Edit` tool (exact-string replacement). Do not touch any other line.
-
-- [ ] **Step 4: Verify the move + normalization (GREEN)**
+- [ ] **Step 3: Verify the byte-faithful move (GREEN)**
 
 ```powershell
 $src = "I:\Dev\claude-toolkit\docs\superpowers\drafts\or-supervisor.md"
 $dst = "I:\Dev\claude-toolkit\plugins\claude-toolkit\agents\or-supervisor.md"
 Test-Path $dst                                                                        # expect True
 Test-Path $src                                                                        # expect False
-(Get-Content $dst | Measure-Object -Line).Lines                                       # expect ≈103 (unchanged — edits are in-line)
-# the stale absolute paths are GONE — expect NO match
-Select-String -Path $dst -Pattern '~/\.claude/skills/or-superpowers-at-scale/assets/'
-# the skill-relative references are present — expect two matches, matching the sibling convention
-Select-String -Path $dst -Pattern "the skill's ``assets/spawn-protocol.md``","the skill's ``assets/iteration-handover-template.md``" | Select-Object Line
-# sanity: the sibling phase agents use the same skill-relative form
-Select-String -Path "I:\Dev\claude-toolkit\plugins\claude-toolkit\agents\or-brainstormer.md","I:\Dev\claude-toolkit\plugins\claude-toolkit\agents\or-plan-writer.md" -Pattern "the skill's ``assets/spawn-protocol.md``" | Select-Object Path
+(Get-Content $dst | Measure-Object -Line).Lines                                       # expect == Step 1's recorded N
+# git sees a pure rename (R100 = 100% similarity, no content change) — like the four workers in Task 1
+git -C I:\Dev\claude-toolkit diff --cached --find-renames --name-status
+# the skill-invocation refs survived the move (expect two); NO stale paths of either form (expect none)
+Select-String -Path $dst -Pattern "Skill\('claude-toolkit:or-superpowers-at-scale'\)" | Select-Object Line
+Select-String -Path $dst -Pattern '~/\.claude/skills/','assets/.*\.md'
 ```
-Expected: destination `True`, source `False`; line count ≈103 (the edits replace text within existing lines, so the count is unchanged); **zero** `~/.claude/...assets/` matches; **two** skill-relative matches in `or-supervisor.md`; and the sibling agents show the same skill-relative form (confirming the outlier is now aligned).
+Expected: destination `True`, source `False`; line count equals Step 1's recorded value; `git diff --cached` shows a single `R100` rename (`docs/superpowers/drafts/or-supervisor.md -> plugins/claude-toolkit/agents/or-supervisor.md`) with **no** content modification; **two** `Skill('claude-toolkit:or-superpowers-at-scale')` invocations in the destination; **zero** `~/.claude/skills/` and **zero** `assets/*.md` path matches. (Because the move is byte-faithful these necessarily hold — asserting them is the explicit supervisor-ref gate.)
 
-- [ ] **Step 5: Verify load-bearing frontmatter and body anchors survived (GREEN — content)**
+- [ ] **Step 4: Verify load-bearing frontmatter and body anchors survived (GREEN — content)**
 
 ```powershell
 $dst = "I:\Dev\claude-toolkit\plugins\claude-toolkit\agents\or-supervisor.md"
@@ -257,20 +227,20 @@ Select-String -Path $dst -Pattern 'Skill\("superpowers:subagent-driven-developme
 ```
 Expected: every frontmatter assertion matches; **no** `Agent` in `tools:`; each body anchor present (the in-body `Skill(...)` call, the adaptation/override and Closed-loopholes sections, the depth-1 and worker-naming headings, and the iteration handover token).
 
-- [ ] **Step 6: Plugin still validates structurally**
+- [ ] **Step 5: Plugin still validates structurally**
 
 ```powershell
 claude plugin validate I:\Dev\claude-toolkit\plugins\claude-toolkit
 ```
-Expected: validation passes. If `claude` is unavailable, record the skip and rely on Steps 4–5.
+Expected: validation passes. If `claude` is unavailable, record the skip and rely on Steps 3–4.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```powershell
 git -C I:\Dev\claude-toolkit add -A
-git -C I:\Dev\claude-toolkit commit -m "feat(agents): finalize or-supervisor and normalize its asset paths to skill-relative"
+git -C I:\Dev\claude-toolkit commit -m "feat(agents): finalize or-supervisor"
 ```
-Expected: one commit containing the supervisor as a rename-with-modification. `git -C I:\Dev\claude-toolkit show HEAD` shows only the two asset-path lines changed (plus the rename); no other body line differs.
+Expected: one commit containing the supervisor as a pure rename (R100). `git -C I:\Dev\claude-toolkit show --stat HEAD` lists it as a rename with zero net line change; no body line differs.
 
 ---
 
@@ -988,7 +958,7 @@ Expected: two new files committed on `or-superpowers-at-scale`.
 
 ## Task 7: Plan-3 integration self-review
 
-A consolidation gate confirming all seven agents are in `agents/` (the five finalized here + the two from Plan 2, plus the two research bodies = nine `or-*` agents total), the eleven assets exist, the supervisor's paths are normalized, depth-1 holds everywhere, the plugin validates, no draft remains, and no manifest/user-facing churn leaked in. Verification only — no new component files; a commit is made only if a fix is required.
+A consolidation gate confirming all seven agents are in `agents/` (the five finalized here + the two from Plan 2, plus the two research bodies = nine `or-*` agents total), the eleven assets exist, every phase/supervisor agent invokes the orchestrator skill for protocol/template refs (no stale `~/.claude`/`assets/*` paths), depth-1 holds everywhere, the plugin validates, no draft remains, and no manifest/user-facing churn leaked in. Verification only — no new component files; a commit is made only if a fix is required.
 
 **Files:** none created.
 
@@ -1017,14 +987,14 @@ Select-String -Path "$a\or-spec-reviewer.md","$a\or-code-quality-reviewer.md","$
 ```
 Expected: **no** `Agent` anywhere; every agent shows `SendMessage=True`; the two research bodies carry `Write` + `Skill`; the three reviewers carry none of `Skill`/`Write`/`Edit` (read-only + SendMessage only).
 
-- [ ] **Step 3: The supervisor's asset paths are normalized; siblings consistent**
+- [ ] **Step 3: Supervisor + phase agents invoke the orchestrator skill (no stale paths)**
 
 ```powershell
 $a = "I:\Dev\claude-toolkit\plugins\claude-toolkit\agents"
-Select-String -Path "$a\or-supervisor.md" -Pattern '~/\.claude/skills/'                 # expect NO match
-Select-String -Path "$a\or-supervisor.md","$a\or-brainstormer.md","$a\or-plan-writer.md" -Pattern "the skill's ``assets/spawn-protocol.md``" | Select-Object Path
+Select-String -Path "$a\or-supervisor.md","$a\or-brainstormer.md","$a\or-plan-writer.md" -Pattern '~/\.claude/skills/','assets/.*\.md'                 # expect NO match
+foreach ($n in 'or-supervisor','or-brainstormer','or-plan-writer') { "{0}: skill-invocations={1}" -f $n, (Select-String -Path "$a\$n.md" -Pattern "Skill\('claude-toolkit:or-superpowers-at-scale'\)").Count }
 ```
-Expected: **no** `~/.claude/skills/` reference in the supervisor; all three phase/supervisor agents reference `assets/spawn-protocol.md` in the same skill-relative form.
+Expected: **no** `~/.claude/skills/` or `assets/*.md` path reference in any of the three; each of `or-supervisor`/`or-brainstormer`/`or-plan-writer` shows `skill-invocations=2` — confirming all three reach orchestrator protocols/templates via skill invocation, not a path.
 
 - [ ] **Step 4: All eleven assets exist under the skill**
 
@@ -1037,17 +1007,19 @@ $present = ($eleven | Where-Object { Test-Path "$x\$_.md" }).Count
 ```
 Expected: `assets present: 11 / 11` and `assets in dir: 11` (exactly the eleven — no stray files).
 
-- [ ] **Step 5: Every `assets/...` reference made by an agent resolves to a real asset**
+- [ ] **Step 5: No agent references a bundled asset by path; the assets the skill surfaces all exist**
 
 ```powershell
 $a = "I:\Dev\claude-toolkit\plugins\claude-toolkit\agents"
 $x = "I:\Dev\claude-toolkit\plugins\claude-toolkit\skills\or-superpowers-at-scale\assets"
-# the asset filenames referenced in agent bodies (spawn-protocol, iteration/brainstormer/plan-writer handover templates) all exist
+# invariant: NO or-* agent reaches an asset by path — protocol/template access is via skill invocation only
+Select-String -Path "$a\or-*.md" -Pattern 'assets/.*\.md','~/\.claude/'
+# the assets the skill surfaces to a teammate that invokes it (spawn-protocol + the three handover templates) exist
 foreach ($f in 'spawn-protocol.md','iteration-handover-template.md','brainstormer-handover-template.md','plan-writer-handover-template.md') {
   "{0}: {1}" -f $f, (Test-Path "$x\$f")
 }
 ```
-Expected: each referenced asset is `True` — the supervisor's `assets/spawn-protocol.md` + `assets/iteration-handover-template.md`, and the phase agents' `assets/{brainstormer,plan-writer}-handover-template.md` + `assets/spawn-protocol.md`, all point at files that now exist.
+Expected: **no** `assets/*.md` or `~/.claude/` path reference in any `or-*` agent body (agents invoke `Skill('claude-toolkit:or-superpowers-at-scale')` instead — Step 3); and each asset the skill surfaces on invocation (`spawn-protocol.md`, the iteration / brainstormer / plan-writer handover templates) is `True`. (Whether a teammate's skill invocation resolves that bundled content at runtime is impl-note #3 — deferred to the cutover spike.)
 
 - [ ] **Step 6: Plugin validates; no manifest/version/README churn**
 
@@ -1062,13 +1034,13 @@ Expected: validation passes (or `claude` skip recorded). The `git diff` since th
 ```powershell
 git -C I:\Dev\claude-toolkit log --oneline efe9637..HEAD
 ```
-Expected: six commits since the Plan-2 tip `efe9637` — `feat(agents): finalize or-implementer and the three reviewer workers`, `feat(agents): finalize or-supervisor and normalize its asset paths to skill-relative`, `feat(agents): add or-dependency-researcher and or-community-researcher research teammates`, `feat(skills): add or-superpowers-at-scale spawn-context templates`, `feat(skills): add or-superpowers-at-scale handover templates`, `feat(skills): add or-superpowers-at-scale spawn-protocol and preflight-brief references` — plus (after this plan is saved) the Plan-3 doc commit.
+Expected: six commits since the Plan-2 tip `efe9637` — `feat(agents): finalize or-implementer and the three reviewer workers`, `feat(agents): finalize or-supervisor`, `feat(agents): add or-dependency-researcher and or-community-researcher research teammates`, `feat(skills): add or-superpowers-at-scale spawn-context templates`, `feat(skills): add or-superpowers-at-scale handover templates`, `feat(skills): add or-superpowers-at-scale spawn-protocol and preflight-brief references` — plus (after this plan is saved) the Plan-3 doc commit.
 
 - [ ] **Step 8: Spec-coverage check for Plan 3**
 
 Confirm every Plan-3 design requirement has a corresponding artifact:
 - Five remaining drafts finalized into `agents/`, frontmatter + bodies intact, depth-1 ✓ (design §"Agent Inventory" rows 3–7, §"`or-supervisor.md` body composition", §"`or-implementer.md` frontmatter" — no `model:`)
-- `or-supervisor` asset references normalized to the plugin-correct, sibling-consistent form ✓ (design re-homing revision 2026-05-30; sibling convention from Plan 2)
+- All five reviewed drafts (incl. `or-supervisor`) finalized verbatim; agents reach orchestrator protocols + handover templates by invoking `Skill('claude-toolkit:or-superpowers-at-scale')` — no stale `~/.claude`/`assets/*` paths ✓ (skill-invocation rework; design §"Skill loading mechanism", re-homing revision 2026-05-30)
 - Two research teammates authored from the template — five body elements, plugin-qualified `Skill(...)` calls, `Write`+`SendMessage`, no `Agent`/`AskUserQuestion`, Context7 on dependency only ✓ (design §"Research agent body", §"Agent Inventory" rows 8–9)
 - Five spawn-context templates — content matches design §"Spawn-context templates" verbatim ✓
 - Two phase handover templates — content matches design §"Phase handover templates" verbatim ✓
@@ -1094,9 +1066,9 @@ Otherwise, no commit is needed — Tasks 1–6 already committed their work. The
 
 **1. Spec coverage:** Task 7 Step 8 enumerates the Plan-3 component requirements against the design (five draft finalizations, two research bodies, eleven assets), plus the deliberate Plan-4 deferrals (operating-discipline body, SHUTDOWN canonical text, command wrapper, release). No gaps.
 
-**2. Placeholder scan:** No "TBD"/"handle edge cases"/"similar to above". The deliberately-not-inlined content is the four worker bodies (`or-implementer` + three reviewers) — relocated by `git mv` (a byte-faithful move of reviewed, committed content) and verified by frontmatter/anchor greps + R100 rename detection + line-count equality, because re-inlining them would duplicate the thing being finalized. `or-supervisor` is moved the same way with exactly two lines edited (the asset-path normalization, shown in full). Every newly-authored file (the two research bodies, all eleven assets) is shown complete and verbatim in its task. The PRESERVED iteration template and ADAPTED manager template / spawn-protocol / preflight-brief are each inlined in full (not "PRESERVE from X" by reference), so the engineer needs no second file open.
+**2. Placeholder scan:** No "TBD"/"handle edge cases"/"similar to above". The deliberately-not-inlined content is the five reviewed agent bodies (`or-supervisor`, `or-implementer`, and the three reviewers) — relocated by `git mv` (a byte-faithful move of reviewed, committed content) and verified by frontmatter/anchor greps + R100 rename detection + line-count equality, because re-inlining them would duplicate the thing being finalized. All five are pure moves with no body edit: their drafts already invoke `Skill('claude-toolkit:or-superpowers-at-scale')` for protocol/template refs (the pre-suite skill-invocation rework). Every newly-authored file (the two research bodies, all eleven assets) is shown complete and verbatim in its task. The PRESERVED iteration template and ADAPTED manager template / spawn-protocol / preflight-brief are each inlined in full (not "PRESERVE from X" by reference), so the engineer needs no second file open.
 
-**3. Type/name consistency:** Agent names (`or-supervisor`, `or-implementer`, `or-spec-reviewer`, `or-code-quality-reviewer`, `or-final-reviewer`, `or-dependency-researcher`, `or-community-researcher`) match the drafts, the spec Agent Inventory, and the Plan-2 skeleton's phase-flow. The worker-naming convention (`or-implementer-task<N>`, `or-spec-reviewer-task<N>`, `or-code-quality-reviewer-task<N>`, `or-final-reviewer`) is identical in the supervisor body, the iteration template's normalized names, and the spawn-protocol examples. The `ROLE → subagent_type` map (`implementer → claude-toolkit:or-implementer`, etc.) matches the spec §"SPAWN protocol". The research bodies' in-body skill names (`claude-toolkit:dependency-research-methodology`, `claude-toolkit:community-research-methodology`, `claude-toolkit:research-deposit`) match the Skill Inventory and Plan 1's authored skill names; their `skills:` frontmatter uses the bare forms, matching Plan 1's qualified-in-body / bare-in-frontmatter split. Completion tokens (`RESEARCH_DONE: <path>`, `RESEARCH_BLOCKED: <path> — <reason>`, `ITERATION <N> — STOPPED_FOR_HANDOVER`) match the design §"Handover trigger token shape" and §"Research-deposit semantics". The spawn-context filenames the broker substitutes (`implementer-spawn-context.md`, `reviewer-spawn-context.md`) match the files authored in Task 4. The asset references in agent bodies all resolve to assets authored in Tasks 4–6 (Task 7 Step 5).
+**3. Type/name consistency:** Agent names (`or-supervisor`, `or-implementer`, `or-spec-reviewer`, `or-code-quality-reviewer`, `or-final-reviewer`, `or-dependency-researcher`, `or-community-researcher`) match the drafts, the spec Agent Inventory, and the Plan-2 skeleton's phase-flow. The worker-naming convention (`or-implementer-task<N>`, `or-spec-reviewer-task<N>`, `or-code-quality-reviewer-task<N>`, `or-final-reviewer`) is identical in the supervisor body, the iteration template's normalized names, and the spawn-protocol examples. The `ROLE → subagent_type` map (`implementer → claude-toolkit:or-implementer`, etc.) matches the spec §"SPAWN protocol". The research bodies' in-body skill names (`claude-toolkit:dependency-research-methodology`, `claude-toolkit:community-research-methodology`, `claude-toolkit:research-deposit`) match the Skill Inventory and Plan 1's authored skill names; their `skills:` frontmatter uses the bare forms, matching Plan 1's qualified-in-body / bare-in-frontmatter split. Completion tokens (`RESEARCH_DONE: <path>`, `RESEARCH_BLOCKED: <path> — <reason>`, `ITERATION <N> — STOPPED_FOR_HANDOVER`) match the design §"Handover trigger token shape" and §"Research-deposit semantics". The spawn-context filenames the broker substitutes (`implementer-spawn-context.md`, `reviewer-spawn-context.md`) match the files authored in Task 4. Agents reach the orchestrator's protocols + handover templates by invoking `Skill('claude-toolkit:or-superpowers-at-scale')` (Task 7 Steps 3, 5), not by asset paths; the assets that skill surfaces are authored in Tasks 4–6.
 
 ## Plan suite status
 
