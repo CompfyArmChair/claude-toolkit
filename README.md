@@ -1,6 +1,6 @@
 # claude-toolkit
 
-Agents, commands, and skills for Claude Code — covering code review, research, and development workflows.
+Agents, commands, skills, and hooks for Claude Code — covering code review, research, and development workflows.
 
 ## What's Included
 
@@ -34,6 +34,9 @@ Agents, commands, and skills for Claude Code — covering code review, research,
 - **research-deposit** — Deposit protocol: research agents write findings to disk and reply with a minimal token
 - **dependency-research-methodology** — Shared library/SDK research-and-citation workflow (used by the dependency researchers)
 - **community-research-methodology** — Shared community/real-world research workflow (used by the community researchers)
+
+### Hooks
+- **context-usage** — Context-window checkpoint hook (`UserPromptSubmit` + `PostToolUse`): announces once per session, per event, when main-thread token usage crosses 100k / 200k / 250k / 300k — a nudge to trim output, lean on subagents, or hand over before quality drops. Per-session state lives under `~/.claude/hooks/state/`.
 
 ## Install
 
