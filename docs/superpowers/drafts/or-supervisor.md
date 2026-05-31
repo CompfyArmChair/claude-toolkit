@@ -86,7 +86,7 @@ The `manager` will SAME TURN:
 Same turn after `Spawned:`, SendMessage `<name>` with the task-specific brief built from the
 appropriate SDD prompt template. **No idle gap between spawn and brief.**
 
-Full mechanics + edge cases: `~/.claude/skills/or-superpowers-at-scale/assets/spawn-protocol.md`.
+Full mechanics + edge cases: invoke `Skill('claude-toolkit:or-superpowers-at-scale')` for the SPAWN protocol reference.
 
 ---
 
@@ -137,8 +137,8 @@ the matching `or-*` subagent type.
 When your context crosses 200k:
 
 1. Stop dispatching new workers.
-2. Write `<HANDOVER_DIR>/iteration-<N>.md` using the template at:
-   `~/.claude/skills/or-superpowers-at-scale/assets/iteration-handover-template.md`
+2. Write `<HANDOVER_DIR>/iteration-<N>.md` using the iteration-handover template from
+   `Skill('claude-toolkit:or-superpowers-at-scale')`.
 3. SendMessage the `manager`:
    `ITERATION <N> — STOPPED_FOR_HANDOVER — report: <path>`
    plus a ≤5-sentence summary paragraph.

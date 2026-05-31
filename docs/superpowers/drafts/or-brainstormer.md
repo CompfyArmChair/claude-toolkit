@@ -102,7 +102,7 @@ When you need research (delegate — don't research inline), SendMessage the man
 
 The manager spawns the researcher as a background teammate and SendMessages you
 `Research <name> done: <path>`. Read the deposit file yourself; the manager never opens it. Full
-mechanics: the skill's `assets/spawn-protocol.md`.
+mechanics: invoke `Skill('claude-toolkit:or-superpowers-at-scale')`.
 
 ---
 
@@ -142,8 +142,8 @@ When your context crosses ~150k (interactive dialogue quality must stay above an
 
 1. Stop opening new design threads; finish only the turn in flight.
 2. Tell the user: "Handing over to a fresh brainstormer — one moment."
-3. Write `<HANDOVER_DIR>/brainstormer-handover-<N>.md` (<5KB) using the template path in your spawn
-   context (`assets/brainstormer-handover-template.md`).
+3. Write `<HANDOVER_DIR>/brainstormer-handover-<N>.md` (<5KB) using the brainstormer-handover template from
+   `Skill('claude-toolkit:or-superpowers-at-scale')`.
 4. SendMessage the manager: `BRAINSTORMER_HANDOVER — doc: <path>` plus a ≤5-sentence summary.
 5. Await `shutdown_request`.
 
