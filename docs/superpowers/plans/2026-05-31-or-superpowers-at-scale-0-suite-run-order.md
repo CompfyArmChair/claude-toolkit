@@ -26,7 +26,7 @@ Absolute base for all plan paths: `I:\Dev\claude-toolkit\docs\superpowers\plans\
 
 ## Progress (the suite's current-position record — update as each plan lands)
 
-- [ ] Plan 1 implemented (research skills + deposit)
+- [x] Plan 1 implemented (research skills + deposit)
 - [ ] Plan 2 implemented (phase agents + skeleton + spikes doc)
 - [ ] Plan 3 implemented (workers + research teammates + assets)
 - [ ] Plan 4 implemented (manager `SKILL.md` body + command + release edits)
