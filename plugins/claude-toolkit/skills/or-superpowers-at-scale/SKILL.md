@@ -221,3 +221,111 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 **The redirect nudge (the only manager→user utterance permitted mid-phase).** If a user message lands on the manager during phase 1/2 (it was meant for the phase agent), reply exactly once — `<phase-agent> is driving — send your messages to it directly (switch with Shift+Down).` — and do NOT relay it.
 
 **PAUSE relay.** Phase agents and the supervisor may request a PAUSE for actions **beyond** the normal workflow — genuinely destructive or visible-to-others operations (a `git push`, deleting files outside the worktree, an external API call). Relay one short paragraph (action + impact only — no commit lists, no narration). Local commits the underlying skills perform are NOT a pause case.
+
+## Proactive Status Reporting (all tiers)
+
+Every agent reports completion proactively — never silently. Waiting to be asked wastes a cycle and burns the asker's context.
+
+- **Workers** — the moment a task is DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT, SendMessage the supervisor the STATUS report. Do not idle waiting for the supervisor to check.
+- **Phase agents** — proactively emit `BRAINSTORM_COMPLETE — spec: <path>` / `PLAN_COMPLETE — plan: <path>` at the terminal, and `BRAINSTORMER_HANDOVER` / `PLAN_WRITER_HANDOVER` on crossing 150k. Never cross 150k silently — that degrades the user-facing dialogue.
+- **Supervisors** — the moment context crosses 200k OR the final task completes (including completion via a PAUSE → user-approval path), write the iteration doc and SendMessage the manager `ITERATION <N> — STOPPED_FOR_HANDOVER — report: <path>` / `ITERATION <N> — COMPLETED — report: <path>`.
+- **The manager** applies this rule to itself with the user (the >200k cross-session handover).
+
+The rule: **completion without notification is incomplete work.**
+
+## Required Communication Style (HARD RULE)
+
+**The manager replies tersely. Always. Non-negotiable.** During phases 1 and 2 the manager is **silent** — the user talks to the phase agent directly; the terse-output rules below apply only during preflight, phase transitions, and implementation.
+
+The ONLY situations that warrant manager text output:
+
+- A SPAWN / SPAWN_RESEARCH arrived: reply `Spawned: <name>` after dispatching.
+- A research teammate returned a completion token: reply `Research <name> done: <path>` (the only multi-word manager→teammate utterance beyond the three below).
+- The supervisor explicitly asked for confirmation/status: reply `Acknowledged.` or `On track.` (the shorter).
+- A check-in ("Are you still there?"): reply `Standing by.`
+- A PAUSE request: relay one short paragraph for the user — **action + impact only**, no commit lists, no follow-up flags.
+- A user message landed on the manager mid-phase: the redirect nudge, exactly once.
+- The single first-session message for the mode (≤ ~25 words; see Initial Setup). Mode `plan` keeps the terse `Spawned … Standing by.` form.
+
+**Everything else is silence.** Idle wake-ups — worker boot, supervisor turning internally, teammate progress, hook reminders, phase-agent ↔ user dialogue — produce **no text and no tool calls**. End the turn empty. When tempted to say `Standing by.`, ask: *did a tier just message me asking for a status?* If no, stay silent.
+
+Forbidden in manager output:
+- ❌ Re-summarizing a brief or message back to the sender
+- ❌ Relaying reviewer findings into chat (they belong in `iteration-N.md`)
+- ❌ Relaying, quoting, or summarizing research findings (they live on disk for the phase agent)
+- ❌ Progress narration ("Here's where we are…", "So far we've completed…")
+- ❌ Elaborated spawn confirmations
+- ❌ Anything more than ~10 words in a routine acknowledgment
+
+Every word in the manager's output budget displaces a word it could hold from incoming messages later. **When tempted to elaborate, STOP** — the information either belongs in a doc or doesn't belong anywhere.
+
+## Conservation Rules
+
+All trace back to the Core Principle. Hard requirements, not suggestions.
+
+1. **No manager-side TaskList.** Task tracking is the supervisor's job (they own `TaskCreate` / `TaskUpdate` for plan tasks). Do NOT track plan tasks — OR phase state — via a manager-side list: it duplicates state and accumulates context via system reminders. Phase state lives in the team roster + the handover-doc series. If a system reminder nudges `TaskCreate`, ignore it — that nudge is generic; this topology forbids manager-side task tracking.
+2. **Do NOT read the spec or plan artifact.** The spec (Phase 1 output) and plan (Phase 2 output) are inputs to the next tier; you substitute their path into the next spawn-context and nothing more. To "verify it exists," let preflight or the next agent do it.
+3. **Do NOT read lower-tier handover docs or deposited findings.** Successor phase agents read the phase-agent handover docs at resume; the phase agent reads the research findings. You only ever know their paths.
+4. **Terse replies (always).** See "Required Communication Style". Hard rule.
+5. **Never relay through chat what belongs in a doc.** Reviewer findings, plan deviations, worker concerns → `iteration-N.md` via the supervisor. Manager does NOT echo.
+6. **Never re-summarize / narrate.** Don't restate briefs. Don't summarize progress.
+7. **Don't proactively ask a tier for status.** If they're working, they're working. Status comes at SPAWN, completion, or handover.
+8. **Cull idle workers aggressively.** The supervisor shuts down on DONE; if an idle worker it missed accumulates, shut it down yourself with a one-line note.
+9. **PAUSE-and-surface with minimum context** — the action + its impact, not the iteration history.
+10. **Findings never transit the manager.** `DEPOSIT` is mandatory, so every research result is written to disk by the researcher and read by the phase agent; you see only the `RESEARCH_DONE: <path>` token. NEVER open, summarize, quote, or store a findings file.
+
+## Handover Ladder
+
+| Tier | Threshold | Handover doc | Trigger token |
+|------|-----------|--------------|---------------|
+| Manager | 200k | `manager-handover-N.md` | (manager surfaces to user — fresh session recommended) |
+| Supervisor | 200k | `iteration-N.md` | `ITERATION <N> — STOPPED_FOR_HANDOVER` / `COMPLETED` |
+| Phase agent | **150k** | `brainstormer-handover-N.md` / `plan-writer-handover-N.md` | `BRAINSTORMER_HANDOVER` / `PLAN_WRITER_HANDOVER` |
+| Research teammate | N/A (one-shot) | — | — |
+
+Templates are bundled at `assets/{iteration,manager,brainstormer,plan-writer}-handover-template.md`; the supervisor and phase agents reach them by invoking this skill. Phase agents handover at 150k (below the supervisor's 200k) so interactive dialogue stays above any compression risk; their handover doc is intentionally <5KB.
+
+**Cross-session manager handover (crossing 200k).** Stop accepting new SPAWN / SPAWN_RESEARCH requests.
+- *Phase 1/2 (a phase agent is alive):* SendMessage it `MANAGER STOPPING — write your handover doc before any further messages, then await shutdown.` The phase agent tells the user to wait, records the interrupted turn's unresolved intent into its handover doc's not-yet-applied section, writes the doc, SendMessages `<PHASE>_HANDOVER — doc: <path>`, and awaits shutdown. (User-facing signaling is the phase agent's job, not the manager's.)
+- *Phase 3 (the supervisor is alive):* SendMessage `MANAGER STOPPING — write iteration-<N>.md before any further dispatches.` and wait for `iteration-<N>.md`.
+
+Then write `manager-handover-<N>.md` (template at `assets/manager-handover-template.md` — it adds `active_phase` + `active_phase_agent`), and tell the user: `Manager context >200k — recommend fresh session. New manager reads manager-handover-<N>.md first.`
+
+**Fresh manager resume.** Read `manager-handover-<N>.md`; identify `active_phase` / `active_phase_agent`. Confirm identities via `~/.claude/teams/<team>/config.json`. If a predecessor agent is still alive, `shutdown_request` it, then spawn the `N+1` successor (`or-<phase>-N+1` pointing at the phase-agent handover doc + artifact, or `or-supervisor-N+1` pointing at the latest `iteration-N.md`), and resume the broker role. (The new phase agent runs its flush-on-resume + latest-revision cross-check before reopening dialogue.)
+
+## Recovery from Common Gotchas
+
+- **Old phase agent / supervisor still alive on resume:** check `~/.claude/teams/<team>/config.json` members; `shutdown_request` it before spawning the `N+1` successor.
+- **Handover doc written mid-flight is stale:** verify HEAD with `git log --oneline <base>..HEAD` before briefing the successor; pass the corrected HEAD in its spawn-context.
+- **TaskList `in_progress` reverts on system reminders:** cosmetic; ignore. The supervisor owns the TaskList.
+- **Idle notifications without a `[to X]` summary:** the tier took no action that turn. Grace one cycle; nudge if it persists.
+
+## Red Flags
+
+| Anti-pattern | Why it's wrong |
+|---|---|
+| Manager outputs to chat during brainstorm/plan phases | The user talks directly to the phase agent. Manager output mid-phase is a discipline violation. |
+| Manager reads the spec/plan artifact, a lower-tier handover doc, or a deposited findings file | Burns the one non-refreshable context and defeats the deposit/handover design. The manager holds paths, not contents. |
+| Manager creates tasks via `TaskCreate` | Duplicates the supervisor's TaskList; every system reminder echoes the list back into manager context. |
+| Manager invokes SDD / brainstorming / writing-plans itself | You broker spawns; the supervisor and phase agents execute the skills. Manager-side execution defeats the topology. |
+| Manager writes a worker's task brief | The supervisor builds it from SDD's prompt template; the manager only substitutes the tiny spawn-context. |
+| Manager elaborates beyond the acceptable-output list | Burns manager context. Hard-rule violation. |
+| Manager emits `Standing by.` (or any text) on an idle wake-up | Each wake-up is one assistant turn; reflexive acknowledgments create 6–10 wasted turns per task. The correct response is silence — end the turn empty. |
+| Manager calls `Agent` without a SPAWN / SPAWN_RESEARCH trigger | All spawns are tier-initiated. |
+| Manager spawns `general-purpose` for a worker role | Worker subagent_type is `claude-toolkit:or-<role>` (the SPAWN broker mapping). |
+| Manager reads the findings file from a deposit-aware researcher | The whole point of deposit is to keep findings out of manager context. Reading it defeats the protocol. |
+| Phase agent invokes the `Agent` tool | Phase agents are depth-1; `Agent` will silently fail. Use `SPAWN_RESEARCH`. |
+| Reviewer agent attempts to edit code | Reviewers have no Write/Edit tools — deliberate. Findings go to the supervisor → relayed to the implementer for fixes. |
+
+## Protocol & Template Reference (bundled assets)
+
+A teammate that loads this skill (`Skill('claude-toolkit:or-superpowers-at-scale')`) reaches the orchestrator's protocol and template files here — they are NOT referenced by path from any agent body (that is what the skill-invocation design buys: install-agnostic access). The skill surfaces:
+
+| Asset | Reached by | Contains |
+|-------|-----------|----------|
+| `assets/spawn-protocol.md` | supervisor, phase agents (via this skill) | Full SPAWN + SPAWN_RESEARCH mechanics (SHUTDOWN's canonical text is above, under Manager Broker Protocols) |
+| `assets/preflight-brief.md` | manager (Initial Setup) | Preflight: mode detection, worktree/branch prompts, the `PREFLIGHT_OK` / `PREFLIGHT_FAIL` blocks |
+| `assets/{brainstormer,plan-writer,supervisor,implementer,reviewer}-spawn-context.md` | manager (broker) | Per-spawn variable templates substituted at spawn time |
+| `assets/iteration-handover-template.md` | supervisor (via this skill) | Iteration handover doc |
+| `assets/{brainstormer,plan-writer}-handover-template.md` | phase agents (via this skill) | Phase handover docs (the anti-drift ledger) |
+| `assets/manager-handover-template.md` | manager (200k handover) | Cross-session manager handover (with the `active_phase` / `active_phase_agent` fields) |
