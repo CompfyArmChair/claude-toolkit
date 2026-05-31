@@ -28,7 +28,7 @@ Absolute base for all plan paths: `I:\Dev\claude-toolkit\docs\superpowers\plans\
 
 - [x] Plan 1 implemented (research skills + deposit)
 - [x] Plan 2 implemented (phase agents + skeleton + spikes doc)
-- [ ] Plan 3 implemented (workers + research teammates + assets)
+- [x] Plan 3 implemented (workers + research teammates + assets)
 - [ ] Plan 4 implemented (manager `SKILL.md` body + command + release edits)
 - [ ] Release pushed (Plan 4 Task 6, on approval)
 - [ ] Cutover spikes run against installed plugin (Spikes 1–3 GREEN = done)
