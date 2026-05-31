@@ -100,7 +100,11 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 
 Run once, at suite cutover (after the Plan 4 release), in order (design §"Cutover & end-state validation"):
 
-1. Remove the deprecated loose `~/.claude` copies the plugin supersedes — the drifted `agents/{dependency,community}-researcher.md`, and the loose `design` / `plan-from-design` / `subagent-driven-development-at-scale` assets.
-2. `claude plugin install claude-toolkit`.
+1. **Remove the deprecated loose `~/.claude` copies the plugin supersedes — DONE 2026-05-31** (backed up to `~/.claude/backups/2026-05-31-toolkit-cutover/`; its README is the full manifest + restore paths). The set below was reconciled against an independent audit — the original narrow list here had drifted (it omitted real name-collisions):
+   - **agents/** (4): `architecture-reviewer.md` (plugin split the test rules TEST-001/002 + MOCK-001/002/003 into the new `test-reviewer` agent; production rules retained), `community-researcher.md` + `dependency-researcher.md` (pre-rehoming full-methodology copies; plugin uses thin dispatchers + the `*-research-methodology` skills), `violation-verifier.md` (byte-identical).
+   - **commands/** (5): `design.md`, `implement-from-plan.md`, `learn.md`, `plan-from-design.md` (all content-identical bar CRLF/LF), and `sdd-at-scale.md` (functionally replaced by `/or-superpowers-at-scale`). `handover.md` kept (no plugin equivalent).
+   - **skills/** (3): `designing-mcp-tools/` (byte-identical), `update-architecture-rules/` (CRLF/LF only), `subagent-driven-development-at-scale/` (functionally replaced by the `or-superpowers-at-scale` skill).
+   - **hooks/**: stripped the `"hooks"` block from `settings.json` and both scripts. `context-usage.py` is now **bundled into the plugin** (released as **v1.3.0**, auto-registered via `hooks/hooks.json`); `completion-verification.py` was retired. `hooks/state/` kept.
+2. `claude plugin install claude-toolkit` (then restart the session so hooks load).
 3. Run **Spike 1 → Spike 5** above, plus Plan 1's deferred wrapper check (a live `Skill('claude-toolkit:dependency-research-methodology')` load and an `or-dependency-researcher` / `dependency-researcher` dispatch that returns a cited report from disk).
 4. Record each result inline in this doc. For any spike that fails, apply its **Fallback**, commit the fix, and re-run that spike. **Do not declare the suite done until Spikes 1–3 are GREEN** (Spikes 4–5 have plain-text/frontmatter fallbacks that are acceptable end states if their probe fails).
