@@ -96,6 +96,34 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 
 ---
 
+## Spike 6 — Worktree binding from a fresh teammate (remediation Item 1 — TOP RISK)
+
+**Purpose:** Resolve the top-risk unknown: a spawned teammate's actual starting CWD, and whether `EnterWorktree(<path>)` binds it into the team's **shared** worktree. Sub-questions: (a) is `EnterWorktree` grantable to a teammate via `tools:` frontmatter and callable by it; (b) what is a fresh background teammate's starting `git rev-parse --show-toplevel` (hypothesis: the manager's main checkout, NOT the worktree); (c) are team teammates auto-isolated by default (and is `worktree.bgIsolation: "none"` needed); (d) does `EnterWorktree(<shared .claude/worktrees/ path>)` land the teammate on the shared branch state; (e) the exact `.claude/worktrees/` path constraint.
+
+**Setup:** Plugin installed. A shared team worktree created under `.claude/worktrees/<name>` (preflight's path).
+
+**RED baseline (proves the bind is load-bearing):** Spawn a repo-touching teammate variant whose body **omits** the STEP -1 bind directive. Confirm its `git rev-parse --show-toplevel` is the **main checkout**, not the worktree — i.e. teammates do NOT inherit the worktree CWD. This is what makes the bind load-bearing.
+
+**GREEN:** A teammate WITH the STEP -1 bind directive (and the `EnterWorktree` tool grant) lands in the shared worktree (`rev-parse` equals `<WORKTREE_PATH>`) and can commit to the branch; spec/code-quality reviewers and the implementer all operate on the **same** branch state.
+
+**Fallback:** If `EnterWorktree` does not bind a *shared* worktree, or teammates are auto-isolated into their own worktrees by default, the shared-worktree design must be reconciled (the supervisor + workers MUST see the same branch) — try `worktree.bgIsolation: "none"`, or switch the per-tier model. If `EnterWorktree` is not grantable to a teammate at all, escalate — the binding mechanism needs redesign before the suite ships. **This is the top-risk item; do not declare the suite done until Spike 6 is GREEN** (no acceptable degraded end-state).
+
+---
+
+## Spike 7 — Empty idle turn (remediation Item 8b)
+
+**Purpose:** Confirm the harness gracefully accepts a manager turn with **no text and no tool call** (end the turn empty). The skill's central conservation discipline — silence on idle wake-ups (worker boot, `shutdown_response`, teammate progress, hook reminders) — depends on it.
+
+**Setup:** Plugin installed; a running orchestration (or a minimal manager teammate) driven to an idle-class wake-up.
+
+**RED baseline:** None meaningful — capability probe. The implicit failure mode is the harness erroring or forcing output on an empty turn.
+
+**GREEN:** The manager ends an idle wake-up with no output and no tool call, and the harness accepts it (no error, no forced text).
+
+**Fallback:** If a truly-empty turn is rejected, the silence-on-idle discipline must be reworked — define the minimal accepted no-op and update the playbook's Idle Taxonomy + Communication Style. Until GREEN, treat silence-on-idle as load-bearing-and-unverified. **Do not declare the suite done until Spike 7 is GREEN.**
+
+---
+
 ## Cutover checklist
 
 Run once, at suite cutover (after the Plan 4 release), in order (design §"Cutover & end-state validation"):
@@ -106,5 +134,5 @@ Run once, at suite cutover (after the Plan 4 release), in order (design §"Cutov
    - **skills/** (3): `designing-mcp-tools/` (byte-identical), `update-architecture-rules/` (CRLF/LF only), `subagent-driven-development-at-scale/` (functionally replaced by the `or-superpowers-at-scale` skill).
    - **hooks/**: stripped the `"hooks"` block from `settings.json` and both scripts. `context-usage.py` is now **bundled into the plugin** (released as **v1.3.0**, auto-registered via `hooks/hooks.json`); `completion-verification.py` was retired. `hooks/state/` kept.
 2. `claude plugin install claude-toolkit` (then restart the session so hooks load).
-3. Run **Spike 1 → Spike 5** above, plus Plan 1's deferred wrapper check (a live `Skill('claude-toolkit:dependency-research-methodology')` load and an `or-dependency-researcher` / `dependency-researcher` dispatch that returns a cited report from disk).
-4. Record each result inline in this doc. For any spike that fails, apply its **Fallback**, commit the fix, and re-run that spike. **Do not declare the suite done until Spikes 1–3 are GREEN** (Spikes 4–5 have plain-text/frontmatter fallbacks that are acceptable end states if their probe fails).
+3. Run **Spike 1 → Spike 7** above, plus Plan 1's deferred wrapper check (a live `Skill('claude-toolkit:dependency-research-methodology')` load and an `or-dependency-researcher` / `dependency-researcher` dispatch that returns a cited report from disk). Spikes 6–7 discharge remediation Items 1 and 8b respectively.
+4. Record each result inline in this doc. For any spike that fails, apply its **Fallback**, commit the fix, and re-run that spike. **Do not declare the suite done until Spikes 1–3, Spike 6 (worktree binding — top risk), and Spike 7 (empty idle turn) are GREEN** (Spikes 4–5 retain acceptable plain-text/frontmatter fallbacks).
