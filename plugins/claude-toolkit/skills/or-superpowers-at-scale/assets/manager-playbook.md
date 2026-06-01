@@ -56,6 +56,15 @@ You hold this block as the substrate for the next spawn-context — nothing more
 
 **Delegate preflight; do NOT run checks in your own context.** Mode detection, branch check, worktree setup, and metadata extraction are exactly the work that should burn a subagent's context, not yours.
 
+### Input (the skill's invocation arguments)
+
+This skill is **user-invocable** (`/or-superpowers-at-scale [<idea> | <spec-path> | <plan-path>]`). Two values seed preflight:
+
+- **`<USER_INPUT>`** — the invocation argument: an **idea statement**, a **spec path** (`docs/superpowers/specs/*-design.md`), a **plan path** (`docs/superpowers/plans/*.md`), or **empty**. You do NOT classify it — you pass it verbatim into `preflight-brief.md`; preflight detects the mode (and asks the user if it is ambiguous).
+- **`<USER_CONSENT>`** — whether the user has pre-authorised working on `main`/`master`. **Default `"no"`** unless the user explicitly said otherwise. Passed into `preflight-brief.md`; preflight FAILs a default-branch base without consent.
+
+Substitute both into `preflight-brief.md` at step 1 below.
+
 1. **Spawn the preflight subagent (foreground, blocking).** Load `assets/preflight-brief.md`, substitute `<USER_INPUT>` and `<USER_CONSENT>`, then:
 
    ```
@@ -78,9 +87,9 @@ You hold this block as the substrate for the next spawn-context — nothing more
    - `plan` → `or-supervisor-1` (`supervisor-spawn-context.md`)
 
 5. **Emit the single first-session message for the mode**, then revert to terse protocol (and silence during phases 1/2):
-   - `idea`: `Spawned or-brainstormer-1 (opus, background) on team `<name>`. Talk to it directly — switch with Shift+Down. It's driving Phase 1.`
-   - `spec`: `Spawned or-plan-writer-1 (opus, background) on team `<name>`. Talk to it directly — switch with Shift+Down. It's driving Phase 2.`
-   - `plan`: `Spawned or-supervisor-1 (opus, background) on team `<name>`. Standing by.`
+   - `idea`: `Spawned or-brainstormer-1 (opus, background) on team <TEAM>. Talk to it directly — switch with Shift+Down. It's driving Phase 1.`
+   - `spec`: `Spawned or-plan-writer-1 (opus, background) on team <TEAM>. Talk to it directly — switch with Shift+Down. It's driving Phase 2.`
+   - `plan`: `Spawned or-supervisor-1 (opus, background) on team <TEAM>. Standing by.`
 
 **No setup-time handover doc.** Project context lives in the spawn-context. The handover-doc series begins only when a tier crosses its threshold.
 
