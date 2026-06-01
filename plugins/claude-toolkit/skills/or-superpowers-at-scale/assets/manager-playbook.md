@@ -125,7 +125,7 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 | `SHUTDOWN` (supervisor) | Action | Issue `shutdown_request` to the named worker; no reply |
 | Phase agent `<PHASE>_COMPLETE` (`BRAINSTORM_COMPLETE` / `PLAN_COMPLETE`) | Action | Shut the phase agent down; spawn the next-phase agent. For `PLAN_COMPLETE`: first surface the go-ahead and await the user's approval, *then* spawn the supervisor |
 | Phase agent `<PHASE>_HANDOVER` | Action | Execute the phase-handover protocol (Handover Ladder) |
-| Phase agent / supervisor `PHASE_PAUSE` / PAUSE | Action | Relay one short paragraph (action + impact) to the user; after approval reply `PROCEED` / `REJECTED — reason: <line>` |
+| Phase agent / supervisor `PHASE_PAUSE` | Action | Relay one short paragraph (action + impact) to the user; after approval reply `PROCEED` / `REJECTED — reason: <line>` |
 | Phase agent `PHASE_ABORT` | Action | **Mechanical** — shut the phase agent down and end the session cleanly. The user-facing confirm already happened in the phase agent's own dialogue (it emits `PHASE_ABORT` only post-confirmation); the manager surfaces nothing. |
 | Supervisor `ITERATION N — STOPPED_FOR_HANDOVER / COMPLETED` | Action | Execute the iteration-handover protocol |
 | User message addressed to the manager during phase 1/2 | Action | Reply ONCE with the redirect nudge; do not relay |
@@ -135,7 +135,7 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 
 **The redirect nudge (the only manager→user utterance permitted mid-phase).** If a user message lands on the manager during phase 1/2 (it was meant for the phase agent), reply exactly once — `<phase-agent> is driving — send your messages to it directly (switch with Shift+Down).` — and do NOT relay it.
 
-**PAUSE relay.** Phase agents and the supervisor may request a PAUSE for actions **beyond** the normal workflow — genuinely destructive or visible-to-others operations (a `git push`, deleting files outside the worktree, an external API call). Relay one short paragraph (action + impact only — no commit lists, no narration). Local commits the underlying skills perform are NOT a pause case.
+**PAUSE relay.** Phase agents and the supervisor request a PAUSE with the **single structured `PHASE_PAUSE` token** (the same token across all depth-1 tiers — `action:` / `impact:` fields) for actions **beyond** the normal workflow: genuinely destructive or visible-to-others operations (a `git push` outside Phase 4, deleting files outside the worktree, an external API call). Relay one short paragraph (action + impact only — no commit lists, no narration). Local commits the underlying skills perform are NOT a pause case.
 
 ## Proactive Status Reporting (all tiers)
 
