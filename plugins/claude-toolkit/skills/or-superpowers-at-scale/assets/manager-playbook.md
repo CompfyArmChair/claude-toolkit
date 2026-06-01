@@ -126,7 +126,7 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 | Phase agent `<PHASE>_COMPLETE` (`BRAINSTORM_COMPLETE` / `PLAN_COMPLETE`) | Action | Shut the phase agent down; spawn the next-phase agent. For `PLAN_COMPLETE`: first surface the go-ahead and await the user's approval, *then* spawn the supervisor |
 | Phase agent `<PHASE>_HANDOVER` | Action | Execute the phase-handover protocol (Handover Ladder) |
 | Phase agent / supervisor `PHASE_PAUSE` / PAUSE | Action | Relay one short paragraph (action + impact) to the user; after approval reply `PROCEED` / `REJECTED — reason: <line>` |
-| Phase agent `PHASE_ABORT` | Action | Surface `Phase agent reports abort. Confirm by typing 'exit'; otherwise the phase continues.`; on confirm, shut the phase agent down and end the session cleanly |
+| Phase agent `PHASE_ABORT` | Action | **Mechanical** — shut the phase agent down and end the session cleanly. The user-facing confirm already happened in the phase agent's own dialogue (it emits `PHASE_ABORT` only post-confirmation); the manager surfaces nothing. |
 | Supervisor `ITERATION N — STOPPED_FOR_HANDOVER / COMPLETED` | Action | Execute the iteration-handover protocol |
 | User message addressed to the manager during phase 1/2 | Action | Reply ONCE with the redirect nudge; do not relay |
 | Worker/research boot, `shutdown_response`, termination; supervisor turning internally; teammate progress; hook/system reminders; phase-agent ↔ user dialogue events | Idle | No output, no tool calls |
@@ -152,15 +152,22 @@ The rule: **completion without notification is incomplete work.**
 
 **The manager replies tersely. Always. Non-negotiable.** During phases 1 and 2 the manager is **silent** — the user talks to the phase agent directly; the terse-output rules below apply only during preflight, phase transitions, and implementation.
 
-The ONLY situations that warrant manager text output:
+Manager text output falls into exactly two sanctioned categories — nothing else:
 
-- A SPAWN / SPAWN_RESEARCH arrived: reply `Spawned: <name>` after dispatching.
-- A research teammate returned a completion token: reply `Research <name> done: <path>` (the only multi-word manager→teammate utterance beyond the three below).
-- The supervisor explicitly asked for confirmation/status: reply `Acknowledged.` or `On track.` (the shorter).
-- A check-in ("Are you still there?"): reply `Standing by.`
-- A PAUSE request: relay one short paragraph for the user — **action + impact only**, no commit lists, no follow-up flags.
-- A user message landed on the manager mid-phase: the redirect nudge, exactly once.
-- The single first-session message for the mode (≤ ~25 words; see Initial Setup). Mode `plan` keeps the terse `Spawned … Standing by.` form.
+**Routine protocol replies** (terse, ≤~10 words):
+- `Spawned: <name>` — after dispatching a SPAWN / SPAWN_RESEARCH.
+- `Research <name> done: <path>` — relaying a research completion token.
+- `Acknowledged.` / `On track.` — the supervisor explicitly asked for confirmation/status (the shorter).
+- `Standing by.` — a direct check-in ("Are you still there?").
+- the **PAUSE relay** — one short paragraph (action + impact only); see "Phase Transitions & Idle Taxonomy" → PAUSE relay.
+- the **redirect nudge** — exactly once when a user message lands on the manager mid-phase; see "Phase Transitions & Idle Taxonomy".
+
+**Sanctioned transition & lifecycle surfacings** (each governed by its own section — do not duplicate the wording here):
+- the single **first-session message** for the mode — see "Initial Setup".
+- the **plan→implementation go-ahead** — see "Phase Transitions & Idle Taxonomy" → Plan→implementation go-ahead.
+- the **>200k cross-session handover notice** — see "Handover Ladder".
+
+Every sanctioned surfacing happens at a phase transition or lifecycle boundary; **mid-phase the manager stays silent** (the user talks to the phase agent). `PHASE_ABORT` is NOT in this list — its handling is mechanical (shut down + end); the user-facing confirm is owned by the phase agent.
 
 **Everything else is silence.** Idle wake-ups — worker boot, supervisor turning internally, teammate progress, hook reminders, phase-agent ↔ user dialogue — produce **no text and no tool calls**. End the turn empty. When tempted to say `Standing by.`, ask: *did a tier just message me asking for a status?* If no, stay silent.
 
