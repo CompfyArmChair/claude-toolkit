@@ -4,8 +4,8 @@ date: <YYYY-MM-DD>
 team: <team-name>
 plan: <path/to/plan-or-none>
 branch: <branch-name>
-active_phase: brainstorm | plan | implement
-active_phase_agent: <name of currently-alive phase agent, or none>
+active_phase: brainstorm | plan | implement | ship
+active_phase_agent: <name of currently-alive phase agent or finisher, or none>
 ---
 
 # Manager Handover <N>
@@ -18,8 +18,8 @@ Invoke `Skill('claude-toolkit:or-superpowers-at-scale')` to load.
 
 ## Active phase (read FIRST on resume)
 
-- `active_phase`: `<brainstorm | plan | implement>`
-- `active_phase_agent`: `<or-brainstormer-<N> | or-plan-writer-<N> | none>`
+- `active_phase`: `<brainstorm | plan | implement | ship>`
+- `active_phase_agent`: `<or-brainstormer-<N> | or-plan-writer-<N> | or-finisher-<N> | none>`
 - Phase-agent handover doc (if mid-phase 1/2): `<HANDOVER_DIR>/<phase>-handover-<N>.md`
 
 A fresh manager uses this to decide whether to expect a phase agent alive in the team config (resume per design §"Fresh manager session resume") or whether implementation was already underway (resume per the supervisor/iteration handover).

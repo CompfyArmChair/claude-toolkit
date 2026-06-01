@@ -129,7 +129,10 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 | Phase agent `<PHASE>_HANDOVER` | Action | Execute the phase-handover protocol (Handover Ladder) |
 | Phase agent / supervisor `PHASE_PAUSE` | Action | Relay one short paragraph (action + impact) to the user; after approval reply `PROCEED` / `REJECTED — reason: <line>` |
 | Phase agent `PHASE_ABORT` | Action | **Mechanical** — shut the phase agent down and end the session cleanly. The user-facing confirm already happened in the phase agent's own dialogue (it emits `PHASE_ABORT` only post-confirmation); the manager surfaces nothing. |
-| Supervisor `ITERATION N — STOPPED_FOR_HANDOVER / COMPLETED` | Action | Execute the iteration-handover protocol |
+| Supervisor `ITERATION N — STOPPED_FOR_HANDOVER` | Action | Execute the iteration-handover protocol (spawn `or-supervisor-(N+1)` on the latest `iteration-N.md`) |
+| Supervisor `ITERATION N — COMPLETED` | Action | Shut the supervisor down; spawn `or-finisher-1` (Phase 4) with `finisher-spawn-context.md` substituted (branch / base / worktree / plan / latest `iteration-N.md`) |
+| Finisher `SHIP_COMPLETE` | Action | Shut the finisher down; **end the session** — the workflow is complete |
+| Finisher `FINISHER_HANDOVER` (rare) | Action | Shut it down; spawn `or-finisher-(N+1)` on the same spawn-context — it re-runs finishing |
 | User message addressed to the manager during phase 1/2 | Action | Reply ONCE with the redirect nudge; do not relay |
 | Worker/research boot, `shutdown_response`, termination; supervisor turning internally; teammate progress; hook/system reminders; phase-agent ↔ user dialogue events | Idle | No output, no tool calls |
 
@@ -146,6 +149,7 @@ Every agent reports completion proactively — never silently. Waiting to be ask
 - **Workers** — the moment a task is DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT, SendMessage the supervisor the STATUS report. Do not idle waiting for the supervisor to check.
 - **Phase agents** — proactively emit `BRAINSTORM_COMPLETE — spec: <path>` / `PLAN_COMPLETE — plan: <path>` at the terminal, and `BRAINSTORMER_HANDOVER` / `PLAN_WRITER_HANDOVER` on crossing 150k. Never cross 150k silently — that degrades the user-facing dialogue.
 - **Supervisors** — the moment context crosses 200k OR the final task completes (including completion via a PAUSE → user-approval path), write the iteration doc and SendMessage the manager `ITERATION <N> — STOPPED_FOR_HANDOVER — report: <path>` / `ITERATION <N> — COMPLETED — report: <path>`.
+- **Finisher** — the moment `finishing-a-development-branch` completes (the user's chosen merge / PR / cleanup is done), SendMessage the manager `SHIP_COMPLETE — <one-line summary>`. Do not idle after finishing.
 - **The manager** applies this rule to itself with the user (the >200k cross-session handover).
 
 The rule: **completion without notification is incomplete work.**
@@ -207,6 +211,7 @@ All trace back to the Core Principle. Hard requirements, not suggestions.
 | Manager | 200k | `manager-handover-N.md` | (manager surfaces to user — fresh session recommended) |
 | Supervisor | 200k | `iteration-N.md` | `ITERATION <N> — STOPPED_FOR_HANDOVER` / `COMPLETED` |
 | Phase agent | **150k** | `brainstormer-handover-N.md` / `plan-writer-handover-N.md` | `BRAINSTORMER_HANDOVER` / `PLAN_WRITER_HANDOVER` |
+| Finisher | 150k (rare) | (none — successor re-runs `finishing-a-development-branch`) | `FINISHER_HANDOVER` |
 | Research teammate | N/A (one-shot) | — | — |
 
 Templates are bundled at `assets/{iteration,manager,brainstormer,plan-writer}-handover-template.md`; the supervisor and phase agents reach them by invoking this skill. Phase agents handover at 150k (below the supervisor's 200k) so interactive dialogue stays above any compression risk; their handover doc is intentionally <5KB.
@@ -217,7 +222,7 @@ Templates are bundled at `assets/{iteration,manager,brainstormer,plan-writer}-ha
 
 Then write `manager-handover-<N>.md` (template at `assets/manager-handover-template.md` — it adds `active_phase` + `active_phase_agent`), and tell the user: `Manager context >200k — recommend fresh session. New manager reads manager-handover-<N>.md first.`
 
-**Fresh manager resume.** Read `manager-handover-<N>.md`; identify `active_phase` / `active_phase_agent`. Confirm identities via `~/.claude/teams/<team>/config.json`. **Reap orphans first.** Before spawning the successor, enumerate **ALL** members in `~/.claude/teams/<team>/config.json` — not just the active depth-1 tier — and issue `shutdown_request` to every orphaned teammate the interrupted session left alive (stale implementers, reviewers, researchers, a prior phase agent / supervisor / finisher). A fresh manager inherits no roster knowledge, so orphans left alive bloat it immediately. Then spawn the `N+1` successor (`or-<phase>-N+1` pointing at the phase-agent handover doc + artifact, or `or-supervisor-N+1` pointing at the latest `iteration-N.md`), and resume the broker role. (The new phase agent runs its flush-on-resume + latest-revision cross-check before reopening dialogue.)
+**Fresh manager resume.** Read `manager-handover-<N>.md`; identify `active_phase` / `active_phase_agent`. Confirm identities via `~/.claude/teams/<team>/config.json`. **Reap orphans first.** Before spawning the successor, enumerate **ALL** members in `~/.claude/teams/<team>/config.json` — not just the active depth-1 tier — and issue `shutdown_request` to every orphaned teammate the interrupted session left alive (stale implementers, reviewers, researchers, a prior phase agent / supervisor / finisher). A fresh manager inherits no roster knowledge, so orphans left alive bloat it immediately. Then spawn the `N+1` successor (`or-<phase>-N+1` pointing at the phase-agent handover doc + artifact, or `or-supervisor-N+1` pointing at the latest `iteration-N.md`), and resume the broker role. (The new phase agent runs its flush-on-resume + latest-revision cross-check before reopening dialogue.) If `active_phase` is `ship`, spawn `or-finisher-(N+1)` pointing at the plan + the latest `iteration-N.md` (it re-runs finishing on the existing branch).
 
 ## Recovery from Common Gotchas
 
