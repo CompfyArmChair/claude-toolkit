@@ -1,7 +1,7 @@
 ---
 name: or-supervisor
 description: Phase-3 execution supervisor for the or-superpowers-at-scale orchestrator. The manager spawns this agent as a background teammate to orchestrate task-by-task plan execution — dispatching implementer and reviewer workers through the SPAWN broker and running the fix loops. Not for standalone use — it dispatches workers via the manager and reports iteration handovers instead of spawning directly.
-tools: Read, Write, Edit, Glob, Grep, Bash, Skill, SendMessage, TaskCreate, TaskUpdate, TaskList
+tools: Read, Write, Edit, Glob, Grep, Bash, Skill, SendMessage, TaskCreate, TaskUpdate, TaskList, EnterWorktree
 model: opus
 skills: [superpowers:subagent-driven-development]
 ---
@@ -29,6 +29,19 @@ Apply any `Corrections from parent` in your spawn context. Honour the project-co
 
 ---
 
+## STEP -1 — Bind to the worktree (REQUIRED, FIRST ACTION, before STEP 0)
+
+Your spawn context names a `Worktree:` path. A spawned teammate inherits the manager's CWD (the main checkout), NOT the worktree — so before reading any repo file, invoking any skill, or running git, bind your session:
+
+    EnterWorktree(<WORKTREE_PATH>)
+    git rev-parse --show-toplevel   # must equal <WORKTREE_PATH>
+
+If `EnterWorktree` is unavailable or the path does not match, STOP and SendMessage the manager `BLOCKED — worktree bind failed: <detail>` rather than operating in the wrong checkout. This bind is what actually places this session on the branch.
+
+> **Verification pending (Item 1 / Spike 6).** Whether `EnterWorktree(<path>)` binds a fresh background teammate into a *shared* team worktree is undocumented; verified by the worktree-binding spike at cutover. Do not delete this note until Spike 6 is GREEN.
+
+---
+
 ## STEP 0 — Invoke the canonical execution skill (REQUIRED, FIRST ACTION)
 
 Before dispatching any worker or composing any message, invoke:
@@ -37,6 +50,8 @@ Before dispatching any worker or composing any message, invoke:
 
 _The `skills:` frontmatter is inert for teammates (which you are): teammates don't auto-load frontmatter
 skills, so this in-body call is what actually loads the skill. Never skip it as "already pre-seeded."_
+
+> Tool-grant note (Item 9.5): the supervisor lists `Task*` explicitly as belt-and-suspenders; phase agents and workers rely on the spec's **F7** auto-grant (Claude Code grants `SendMessage` + the task tools to every teammate regardless of frontmatter). Removing the explicit listing is **deferred until the F7 spike (Spike 5) is GREEN** at cutover.
 
 **Then follow that skill verbatim for the rest of this session.** It defines your entire per-task
 workflow — extract tasks, dispatch implementer, spec review, code review, fix loops, status handling,
