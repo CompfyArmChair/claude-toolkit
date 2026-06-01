@@ -42,13 +42,16 @@ skills, so this in-body call is what actually loads the skill. Never skip it as 
 workflow — extract tasks, dispatch implementer, spec review, code review, fix loops, status handling,
 model selection, prompt templates for each role. Do NOT reconstruct it from memory or this file.
 
-### One adaptation, one override
+### Adaptations & override
 
-- **Adaptation:** Where SDD says "Dispatch implementer subagent" (or spec / code-quality / final
-  reviewer), use the SPAWN protocol below instead. You have no `Agent` tool.
-- **Override:** Spawn spec + code-quality reviewers in PARALLEL after impl reports DONE. SDD describes
-  them sequentially; the team topology runs them concurrently. Reason: the code reviewer catches
-  "spec was wrong" cases that the spec reviewer can't see.
+Two adaptations (forced by the team topology) and one override (a deliberate improvement):
+
+- **Adaptation 1 — dispatch via SPAWN.** Where SDD says "Dispatch implementer subagent" (or spec / code-quality / final reviewer), use the SPAWN protocol below instead. You have no `Agent` tool.
+- **Adaptation 2 — `Task*` for task tracking.** SDD instructs `TodoWrite`; you have the team-harness-native `TaskCreate` / `TaskUpdate` / `TaskList` (granted to every teammate by the spec's F7). Use `Task*` wherever SDD says `TodoWrite` — same intent, harness-native mechanism. (The manager seeing `Task*` system reminders is expected and handled manager-side; do not change your behavior for it.)
+- **Override — parallel reviewers, spec-gated.** SDD dispatches spec review, then (only on pass) code-quality review — a sequential gate. You run spec + code-quality reviewers **in parallel** after the implementer reports DONE. Rationale: **wall-clock latency** — in this team topology both reviewers are cheap and finish in the time of the slower one. **You preserve SDD's gate by moving it from dispatch-order to which-result-counts:**
+  - *Spec passes* (the common case, especially post-TDD) → the concurrent code-quality result was looking at spec-compliant code → it is **valid**; act on it (one round-trip saved).
+  - *Spec fails* → this round's code-quality result was looking at code that is about to change → **discard it**; relay the spec fixes to the implementer, re-run spec review, and once it passes dispatch a **fresh** code-quality review (`or-code-quality-reviewer-task<N>-rev<K>`) on the now-compliant code.
+  - Guarantee: code-quality findings never apply to code about to change (same correctness as SDD's sequential gate); the only cost is wasted compute on a spec-failure round (uncommon).
 
 Everything else from SDD applies verbatim — its red flags, status handling, per-task structure.
 
@@ -128,7 +131,13 @@ the matching `or-*` subagent type.
 3. **Proactive reporting (all directions).** Workers report STATUS to you the instant they finish — if a worker hasn't reported within reasonable time, ping them once; don't let silent completion block the fix loop. You report iteration handover (>200k or completion) to the `manager` proactively — don't wait to be asked.
 4. **In fix-loop relays, enumerate which soft notes to fix vs skip with reasoning.** You are the sole relay between reviewer and implementer; relay quality determines fix-loop efficiency.
 5. **Verify reviewer findings before relaying.** Spot-check cited paths/lines. Wrong fix loops are pure manager-context tax.
-6. **PAUSE before visible-to-others actions.** Local commits to the worktree branch are normal workflow — do them freely. But before any `git push`, `gh pr create`, or shared-state mutation, brief the worker to STATUS-and-PAUSE. SendMessage the `manager` for user surfacing — never proceed without explicit approval propagated back through the `manager`. When you brief the `manager` for the surfacing, send **action + impact only** — not commit lists, follow-up flags, or release notes. Those live in `iteration-N.md`; the user-facing surfacing is one short paragraph the manager can relay verbatim.
+6. **`PHASE_PAUSE` before unusual mid-implementation visible actions.** Phase 3 is **local-commits-only**: frequent local commits to the worktree branch are normal workflow — do them freely, never pause for them. Routine end-of-branch integration (push / PR / merge) is **not** your job — it is Phase 4 (`or-finisher`), so it never triggers a pause here either. PAUSE only for the *unusual mid-implementation* visible-to-others or hard-to-reverse action: an external API call, a plan task that itself pushes / deploys / publishes, a delete outside the worktree. To pause, brief the worker to STATUS-and-PAUSE, then SendMessage the `manager` the **structured** token (identical to the phase agents'; one PAUSE token across all depth-1 tiers):
+
+       PHASE_PAUSE
+       action: <one line>
+       impact: <one line>
+
+   and wait for `PROCEED` or `REJECTED — reason: <line>` propagated back through the `manager`. Send action + impact only — commit lists / follow-up flags live in `iteration-N.md`.
 
 ---
 
