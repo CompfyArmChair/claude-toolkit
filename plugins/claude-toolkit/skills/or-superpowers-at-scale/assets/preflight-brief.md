@@ -25,15 +25,16 @@ Use `AskUserQuestion` to ask the user for:
 - the **worktree name** (offer a slug derived from the idea/spec/plan as the suggested default), and
 - the **base branch** to branch from (default: current HEAD; if that is `main`/`master` and `<USER_CONSENT>` is not "yes", require an explicit non-default choice).
 
-## Step 3 — Checks (in order; stop on first failure)
+## Step 3 — Checks (in order; stop on first failure; non-fatal checks only warn)
 
 1. **Mode artifact exists (modes `spec`/`plan` only).** `test -f <path>`. Missing → FAIL.
 2. **Branch is appropriate.** If the chosen base is `main`/`master` and `<USER_CONSENT>` is not "yes" → FAIL.
-3. **Worktree ready.** Invoke `Skill("superpowers:using-git-worktrees")` and apply its check; create the worktree with the chosen name off the chosen base, and create a `handovers/` directory under the worktree for this session's handover docs. **You absorb the worktree-skill content; the manager does NOT need it in its context.** If something fundamentally blocks worktree setup → FAIL.
+3. **Worktree ready.** Invoke `Skill("superpowers:using-git-worktrees")` and apply its check; create the worktree **under `.claude/worktrees/<name>`** (the `EnterWorktree` path constraint that the repo-touching tiers bind to) off the chosen base, and create a `handovers/` directory under the worktree for this session's handover docs. **You absorb the worktree-skill content; the manager does NOT need it in its context.** If something fundamentally blocks worktree setup → FAIL. The resolved absolute `.claude/worktrees/<name>` path is what you return as `worktree:` — every repo-touching tier `EnterWorktree`s into it.
 4. **Metadata extraction.**
    - For `spec`: read the spec's leading section; extract a one-line goal.
    - For `plan`: read the plan's leading section (first ~80 lines — the preamble, before the task list); extract total task count (count `### Task N:` or equivalent headings via grep/wc rather than reading the whole plan if it's large), the one-line goal (usually `**Goal:**` or the top-line summary), and project conventions surfaced in the preamble (commit format, test command, typecheck command, anything notable).
    - For `idea`: no artifact yet — `goal`, `spec_path`, `plan_path`, and `total_tasks` are `none`.
+5. **Auto-compaction headroom (warn, non-fatal).** If `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` is unset and the model's context window is ≤ 200k, the ~95% auto-compaction trigger (~190k) would pre-empt the manager's 200k handover. Surface a one-line `warning:` in the output block recommending the user set `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` high/disabled (Item 8a; verified at cutover by the spike suite). Do not FAIL on this.
 
 ## Step 4 — Output (exact format)
 
@@ -49,6 +50,7 @@ spec_path: <path-or-none>
 plan_path: <path-or-none>
 goal: <one-line, if spec/plan provided; else none>
 total_tasks: <N, if plan provided; else none>
+warning: <text or "(none)">
 conventions:
   commit_format: <convention or "(none specified)">
   test_command: <cmd or "(none specified)">
