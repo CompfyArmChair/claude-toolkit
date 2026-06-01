@@ -213,11 +213,11 @@ Templates are bundled at `assets/{iteration,manager,brainstormer,plan-writer}-ha
 
 Then write `manager-handover-<N>.md` (template at `assets/manager-handover-template.md` — it adds `active_phase` + `active_phase_agent`), and tell the user: `Manager context >200k — recommend fresh session. New manager reads manager-handover-<N>.md first.`
 
-**Fresh manager resume.** Read `manager-handover-<N>.md`; identify `active_phase` / `active_phase_agent`. Confirm identities via `~/.claude/teams/<team>/config.json`. If a predecessor agent is still alive, `shutdown_request` it, then spawn the `N+1` successor (`or-<phase>-N+1` pointing at the phase-agent handover doc + artifact, or `or-supervisor-N+1` pointing at the latest `iteration-N.md`), and resume the broker role. (The new phase agent runs its flush-on-resume + latest-revision cross-check before reopening dialogue.)
+**Fresh manager resume.** Read `manager-handover-<N>.md`; identify `active_phase` / `active_phase_agent`. Confirm identities via `~/.claude/teams/<team>/config.json`. **Reap orphans first.** Before spawning the successor, enumerate **ALL** members in `~/.claude/teams/<team>/config.json` — not just the active depth-1 tier — and issue `shutdown_request` to every orphaned teammate the interrupted session left alive (stale implementers, reviewers, researchers, a prior phase agent / supervisor / finisher). A fresh manager inherits no roster knowledge, so orphans left alive bloat it immediately. Then spawn the `N+1` successor (`or-<phase>-N+1` pointing at the phase-agent handover doc + artifact, or `or-supervisor-N+1` pointing at the latest `iteration-N.md`), and resume the broker role. (The new phase agent runs its flush-on-resume + latest-revision cross-check before reopening dialogue.)
 
 ## Recovery from Common Gotchas
 
-- **Old phase agent / supervisor still alive on resume:** check `~/.claude/teams/<team>/config.json` members; `shutdown_request` it before spawning the `N+1` successor.
+- **Any orphaned member (phase agent, supervisor, finisher, worker, researcher) still alive on resume:** check `~/.claude/teams/<team>/config.json` members; `shutdown_request` each orphan before spawning the `N+1` successor.
 - **Handover doc written mid-flight is stale:** verify HEAD with `git log --oneline <base>..HEAD` before briefing the successor; pass the corrected HEAD in its spawn-context.
 - **TaskList `in_progress` reverts on system reminders:** cosmetic; ignore. The supervisor owns the TaskList.
 - **Idle notifications without a `[to X]` summary:** the tier took no action that turn. Grace one cycle; nudge if it persists.
