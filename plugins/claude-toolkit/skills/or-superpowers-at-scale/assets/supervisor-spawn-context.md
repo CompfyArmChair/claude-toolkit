@@ -1,4 +1,5 @@
 Identity: <SUPERVISOR_NAME> in team <TEAM_NAME>
+Worktree: <WORKTREE_PATH>
 Plan: <PLAN_PATH>
 Branch: <BRANCH>
 Handover dir: <HANDOVER_DIR>
