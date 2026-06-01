@@ -117,6 +117,8 @@ You then issue `SendMessage(<worker-name>, {type: "shutdown_request", reason: "t
 
 Every wake-up falls into one of two buckets — **action required** or **idle**. Idle wake-ups produce **no output and no tool calls**; end the turn empty. Reflexive `Standing by.` on an idle wake-up is the discipline violation this skill exists to prevent.
 
+> **Load-bearing & unverified (Item 8b).** This silence-on-idle discipline assumes the harness gracefully accepts a turn with **no text and no tool call**. That is undocumented; it is verified by the empty-idle-turn spike at cutover (`docs/superpowers/validation/2026-05-30-or-superpowers-at-scale-behavioral-spikes.md`, Spike 7). Keep the intent, but if the spike fails the discipline needs rethinking. Do not delete this note until Spike 7 is GREEN.
+
 | Wake-up source | Bucket | Manager response |
 |---|---|---|
 | `SPAWN` (supervisor) | Action | Spawn worker; reply `Spawned: <name>` |
@@ -197,6 +199,8 @@ All trace back to the Core Principle. Hard requirements, not suggestions.
 10. **Findings never transit the manager.** `DEPOSIT` is mandatory, so every research result is written to disk by the researcher and read by the phase agent; you see only the `RESEARCH_DONE: <path>` token. NEVER open, summarize, quote, or store a findings file.
 
 ## Handover Ladder
+
+> **Prerequisite — auto-compaction (Item 8a; verification pending Spike 6/7 suite at cutover).** Auto-compaction fires at ~95% of the context window by default (configurable via `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`). This is window-size-coupled: on a 1M-window model 95% ≈ 950k (well above these thresholds — safe); on a **200k-window** model 95% ≈ 190k, which would pre-empt the manager's 200k handover with lossy compaction. **Do not assume a 1M window.** Run the orchestration with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` set high (or disabled) so every tier reaches its handover threshold *first* (handover-not-compact, for all tiers). Preflight can check/warn (see `preflight-brief.md`).
 
 | Tier | Threshold | Handover doc | Trigger token |
 |------|-----------|--------------|---------------|
