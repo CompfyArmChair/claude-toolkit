@@ -15,6 +15,7 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 - **or-brainstormer** / **or-plan-writer** — Phase-1/2 teammates the user talks to directly (idea → spec, spec → plan)
 - **or-supervisor** — Phase-3 implementation supervisor (drives subagent-driven-development)
 - **or-implementer**, **or-spec-reviewer**, **or-code-quality-reviewer**, **or-final-reviewer** — per-task worker tier
+- **or-finisher** — Phase-4 ship teammate (drives finishing-a-development-branch in direct dialogue)
 - **or-dependency-researcher**, **or-community-researcher** — deposit-aware research teammates
 
 ### Commands
@@ -22,7 +23,6 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 - **/plan-from-design** — Create an implementation plan from a tracked design doc (depends on superpowers plugin)
 - **/implement-from-plan** — Execute a tracked plan with subagent-driven development (depends on superpowers plugin)
 - **/learn** — Extract reusable patterns from the current session
-- **/or-superpowers-at-scale** — Orchestrate brainstorm → plan → implement end-to-end in one session (depends on superpowers plugin)
 
 ### Skills
 - **designing-mcp-tools** — Naming conventions, parameter design, error handling, and granularity guidance for MCP server tools
@@ -30,7 +30,7 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 - **creating-marketplace** — Guide to setting up a Claude Code plugin marketplace
 - **creating-plugin** — Guide to creating a Claude Code plugin
 - **updating-plugin** — Checklist for modifying an existing plugin: version bumps, manifest sync, and common mistakes
-- **or-superpowers-at-scale** — 3-tier orchestrator: brainstorm → plan → implement with manager context preserved (depends on superpowers plugin)
+- **or-superpowers-at-scale** — User-invocable 3-tier orchestrator: brainstorm → plan → implement → ship, with the manager's context preserved (`/or-superpowers-at-scale [<idea> | <spec> | <plan>]`; depends on superpowers plugin)
 - **research-deposit** — Deposit protocol: research agents write findings to disk and reply with a minimal token
 - **dependency-research-methodology** — Shared library/SDK research-and-citation workflow (used by the dependency researchers)
 - **community-research-methodology** — Shared community/real-world research workflow (used by the community researchers)
@@ -50,7 +50,7 @@ claude plugin install claude-toolkit
 
 ## Dependencies
 
-The `/design`, `/plan-from-design`, `/implement-from-plan`, and `/or-superpowers-at-scale` commands — and the `or-superpowers-at-scale` skill — depend on the **superpowers** plugin. Install it separately if you want to use them.
+The `/design`, `/plan-from-design`, and `/implement-from-plan` commands — and the `or-superpowers-at-scale` skill — depend on the **superpowers** plugin. Install it separately if you want to use them.
 
 ## License
 
