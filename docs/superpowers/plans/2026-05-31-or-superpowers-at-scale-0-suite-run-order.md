@@ -31,6 +31,6 @@ Absolute base for all plan paths: `I:\Dev\claude-toolkit\docs\superpowers\plans\
 - [x] Plan 3 implemented (workers + research teammates + assets)
 - [x] Plan 4 implemented (manager `SKILL.md` body + command + release edits)
 - [x] Release pushed (Plan 4 Task 6, on approval)
-- [ ] Cutover spikes run against installed plugin (Spikes 1–3 GREEN = done)
+- [x] Cutover spikes run against installed plugin (Spikes 1–3 GREEN = done) — DONE 2026-06-03: all GREEN (Spikes 1/2/3/5/6/7 + Spike 4 RED→remediated + the preflight-dialogue follow-up), recorded in `docs/superpowers/validation/2026-05-30-or-superpowers-at-scale-behavioral-spikes.md`. Suite complete through plugin **1.4.2**; `.claude/last-plan-doc` cleared (line below is now historical).
 
 > The `.claude/last-plan-doc` pointer points here. To resume the suite, read this file, check the Progress box, and run `/sdd-at-scale` on the first unchecked plan.
