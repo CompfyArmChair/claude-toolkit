@@ -82,7 +82,7 @@ Substitute both into `preflight-brief.md` at step 2 below.
 
    Preflight is a **teammate**, not a one-shot subagent, because it must ask the user a few setup questions (mode-if-ambiguous, worktree name, base branch) in plain text — a one-shot subagent has no user channel, and `AskUserQuestion` is main-loop-only (Spike 4). It runs all checks in its own context and reports back via SendMessage; you absorb only its summary block, not the worktree-skill content or any tool output it produced.
 
-3. **Hand the user to preflight, then wait.** Emit one line — `Spawned or-preflight-1 (background) on team <TEAM> to set up the worktree. Talk to it directly — switch with Shift+Down.` — then go terse/idle and await preflight's `PREFLIGHT_OK` / `PREFLIGHT_FAIL` SendMessage.
+3. **Hand the user to preflight, then wait.** Emit one line — `Spawned or-preflight-1 (background) on team <TEAM> to set up the worktree. Talk to it directly — switch with Shift+Down.` — then go terse/idle and await preflight's `PREFLIGHT_OK` / `PREFLIGHT_FAIL` SendMessage. **Preflight's setup questions (worktree name, base branch, mode-if-ambiguous) are answered by the user in preflight's own pane — you neither see nor relay them.** If a preflight setup question ever lands on you, that is preflight misbehaving; do not relay it (relaying burns the manager context the topology exists to preserve) — you receive from preflight only the final `PREFLIGHT_OK` / `PREFLIGHT_FAIL` block.
 
 4. **On preflight's report:**
    - `PREFLIGHT_FAIL` → surface the one-line reason + suggested_recovery to the user, shut preflight down (`shutdown_request`), and stop.
