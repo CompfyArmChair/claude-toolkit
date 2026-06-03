@@ -26,6 +26,12 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 - If **bare** same-plugin names do not resolve: no change — the agent bodies already use the qualified `claude-toolkit:` form. Record "qualified required" as the confirmed convention.
 - If the **in-body call does not load for teammates at all** (unexpected — superpowers teammates rely on it): escalate; the whole pre-seed mechanism needs rework before the suite ships. Do not declare the suite done.
 
+**RESULT — ✅ GREEN (cutover 2026-06-01, installed plugin `d924696`).** Both facets run as probe-mode background teammates (STEP -1 skipped, no dialogue/research). The **RED baseline was observed directly inside each real agent**: before any `Skill()` call — with the `skills:` frontmatter present — the skill's instructional **body was absent** from context (only its name + one-line trigger description were present, for routing). Frontmatter alone does not activate a skill; the in-body call is load-bearing. This is a stronger demonstration than a separate stripped variant (it is the real agent with its real frontmatter showing the body absent pre-call).
+
+- **Facet A — cross-plugin (`or-brainstormer` → `superpowers:brainstorming`):** the in-body `Skill('superpowers:brainstorming')` loaded the full body (HARD-GATE, 9-item checklist, process digraph; base dir `…/superpowers/5.1.0/skills/brainstorming`). Now-active directives quoted as proof: *"ask questions one at a time"*, *"Propose 2–3 different approaches with trade-offs."* Pre-call these were absent. ✅
+- **Facet B — same-plugin (`or-dependency-researcher` → `claude-toolkit:dependency-research-methodology`):** the qualified in-body call loaded the methodology (quoted: *"Every claim must have an inline citation [1]…"*); `claude-toolkit:research-deposit` loaded too. ✅
+- **Name resolution (open question resolved):** the **bare** `Skill('dependency-research-methodology')` *also* resolved — byte-identical content (same `…/claude-toolkit/1.4.0/skills/…` base dir), no error. **Same-plugin bare names resolve; the `claude-toolkit:` prefix is NOT required.** The Fallback's "qualified required" branch is moot. Agent bodies keep the qualified form (more explicit, harmless). ✅
+
 ---
 
 ## Spike 2 — Terminal override holds (impl-note #6) — once per phase agent
@@ -44,6 +50,11 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 
 **Fallback:** If an override does not hold, strengthen that agent's Closed-loopholes list / add a pre-terminal interceptor in its body, then re-run until GREEN. The belt-and-braces design (in-body `Skill(...)` call + explicit Closed-loopholes list) is unverified until this is GREEN for both agents.
 
+**RESULT — ✅ GREEN (cutover 2026-06-01, plugin `d924696`).** Each real phase agent loaded its skill (STEP 0) and was placed at the skill's terminal; a general-purpose RED control loaded the *same* skill **without** the override.
+- **`or-brainstormer`:** `OVERRIDE_HELD` — sent `BRAINSTORM_COMPLETE — spec: …`, did **not** invoke `superpowers:writing-plans`. RED control followed the skill's terminal (*"Invoke the writing-plans skill … Do NOT invoke any other skill"*). ✅
+- **`or-plan-writer`:** `OVERRIDE_HELD` — sent `PLAN_COMPLETE — plan: …`, did **not** ask "Which approach?" or invoke `subagent-driven-development`/`executing-plans`. RED control followed the skill's "Execution Handoff" terminal (*"offer execution choice … 'Which approach?'"* → `subagent-driven-development`). ✅
+- The RED↔real delta isolates each agent body's override + Closed-loopholes list as the load-bearing mechanism. (Probe mode had no live user, so the plan-writer's "tell the user to switch to the manager" final-dialogue line was not exercised — a UX step in a real session; the completion-signal + no-forbidden-skill core held.)
+
 ---
 
 ## Spike 3 — Anti-drift resume holds (impl-note #9) — once per phase agent
@@ -59,6 +70,11 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 **GREEN:** The real successor reconciles the artifact first; the RED variant does not.
 
 **Fallback:** If the discipline does not hold, strengthen the flush-on-resume wording in that agent's body, then re-run until GREEN.
+
+**RESULT — ✅ GREEN (cutover 2026-06-01, plugin `d924696`).** Probed on `or-brainstormer` (its "On resume after a handover" section is structurally identical to `or-plan-writer`'s — same reconcile-latest-revision + flush-unwritten-preferences discipline; result generalizes). Seeded a spec missing "Revision 3" and a handover naming that revision plus a not-yet-applied snake_case preference.
+- **Real successor (`or-brainstormer-2`): `RECONCILED_FIRST`.** Before any dialogue it wrote into the spec (**verified on disk**): `R2: --json` pretty-printable via `--json-indent N` (the handover's Revision 3), the snake_case preference, and a "Revision 3" history entry. ✅
+- **RED control (read-only):** the canonical `superpowers:brainstorming` skill *alone* does **NOT** drive reconcile-the-artifact-first on resume (it writes the spec only at its own post-approval step; it never treats a handover as a source to flush) — its first action would be to continue the dialogue, leaving the deltas unwritten. ✅ This isolates the body's "On resume after a handover" section as load-bearing.
+- **Note:** `or-plan-writer`'s identical "On resume" section was not separately exercised (context economy); structurally identical → expected GREEN. Run an independent pass if fully exhaustive coverage is wanted.
 
 ---
 
@@ -78,6 +94,16 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 
 **Fallback:** If a tier cannot surface `AskUserQuestion`, fall back to **plain-text questions** there: the phase agents' confirmed direct text dialogue already supports that, and preflight's prompts move up to the manager (which can always use `AskUserQuestion`). Update `assets/preflight-brief.md` and the phase-agent bodies accordingly, then re-validate. Until GREEN, preflight's reliance on `AskUserQuestion` is unverified.
 
+**RESULT — ❌ RED → remediated (2026-06-03, installed plugin `d924696`; fix on branch `or-sas-spike4-remediation`).** `AskUserQuestion` is **main-loop-only** — unavailable to *every* non-main agent.
+- **Facet A — RED (real defect).** The shipped preflight path dispatches `subagent_type: general-purpose` as a one-shot foreground subagent (`manager-playbook.md`). A direct probe of that exact vehicle found `AskUserQuestion` absent — not in the `*` grant, and `ToolSearch select:AskUserQuestion` → "No matching deferred tools found". A one-shot subagent also has **no** plain-text dialogue channel, so it cannot ask the user *at all*. Preflight Steps 1–2 as shipped were unrunnable.
+- **Facet B — RED but non-blocking.** A real `claude-toolkit:or-brainstormer` teammate — whose frontmatter *listed* `AskUserQuestion` — reported the tool absent from its toolset. **Frontmatter `AskUserQuestion` is inert for teammates** (like `skills:`). Non-blocking because teammates DO have a plain-text dialogue channel, and the canonical brainstorming / writing-plans / finishing skills ask in plain text (zero `AskUserQuestion` calls in any of them — grep-confirmed).
+- **Net:** the "fall back to plain text" direction holds for the user-facing *teammate* tiers; preflight needed a structural fix because a one-shot subagent has no channel.
+
+**Remediation applied (this branch), per the user's chosen design — promote preflight to a teammate:**
+- **Preflight → background teammate** (`or-preflight-1`): asks mode-if-ambiguous + worktree name + base branch in **plain text**, reports `PREFLIGHT_OK`/`PREFLIGHT_FAIL` to the manager via SendMessage. It **creates** the worktree (`git worktree add`) but does **not** `EnterWorktree` (a teammate's bind moves the whole session — Spike 6). `preflight-brief.md` rewritten; `manager-playbook.md` Initial Setup reordered (TeamCreate first → spawn preflight teammate → await token → shut it down → spawn the phase agent) + idle/action taxonomy + L26/L34 wording; `SKILL.md` Phase 0 wording.
+- **Inert `AskUserQuestion` frontmatter removed** from `or-brainstormer`/`or-plan-writer`/`or-finisher` (+ a one-line "ask in plain text" note in each) and from the general `community-researcher`/`dependency-researcher`.
+- **Open follow-up (non-blocking):** an end-to-end preflight-teammate *dialogue* spike would be the gold standard, but it is confirmation, not a gate — the mechanism is already proven (phase agents do plain-text dialogue; the research-teammate spawn→report→shutdown lifecycle is proven).
+
 ---
 
 ## Spike 5 — Teammates receive task tools; brainstorming checklist works (impl-note #11)
@@ -94,6 +120,11 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 
 **Fallback:** If teammates do **not** auto-receive the task tools, re-add `TaskCreate, TaskUpdate, TaskList` to `or-brainstormer` (and `or-plan-writer`) frontmatter and re-validate. This would also revisit the spec's F7 assumption (design §"Agent tool-grant decisions" → "Phase-agent task tools").
 
+**RESULT — ✅ GREEN (cutover 2026-06-01, plugin `d924696`).** Probed via the real `claude-toolkit:or-brainstormer` (frontmatter `tools:` lists **no** `Task*`/`TodoWrite`).
+- **Task tools auto-granted (F7 holds):** `TaskList`, `TaskCreate` (#9 "spike5-probe"), `TaskUpdate→completed`, `TaskUpdate→deleted` all **succeeded with no authorization error** despite none being in frontmatter. **Caveat:** the `Task*` tools are *deferred* for teammates (the agent ran `ToolSearch select:…` to load schemas before calling) — granted but not pre-listed; no permission was denied.
+- **Brainstorming checklist step:** the loaded skill says *"create a task for each of these items"* (generic, not tool-pinned). In this team harness the available mechanism is the **`Task*`** family (not `TodoWrite`), and it works — a teammate runs the checklist with `Task*`. ✅
+- **Gated follow-up now unblocked:** the explicit `TaskCreate, TaskUpdate, TaskList` listing in `or-supervisor` frontmatter is **redundant for functionality** (auto-grant covers it; Item 9.5). Removal is optional — it still documents intent. Batch with the other post-suite agent-body edits.
+
 ---
 
 ## Spike 6 — Worktree binding from a fresh teammate (remediation Item 1 — TOP RISK)
@@ -107,6 +138,21 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 **GREEN:** A teammate WITH the STEP -1 bind directive (and the `EnterWorktree` tool grant) lands in the shared worktree (`rev-parse` equals `<WORKTREE_PATH>`) and can commit to the branch; spec/code-quality reviewers and the implementer all operate on the **same** branch state.
 
 **Fallback:** If `EnterWorktree` does not bind a *shared* worktree, or teammates are auto-isolated into their own worktrees by default, the shared-worktree design must be reconciled (the supervisor + workers MUST see the same branch) — try `worktree.bgIsolation: "none"`, or switch the per-tier model. If `EnterWorktree` is not grantable to a teammate at all, escalate — the binding mechanism needs redesign before the suite ships. **This is the top-risk item; do not declare the suite done until Spike 6 is GREEN** (no acceptable degraded end-state).
+
+**RESULT — ✅ GREEN (cutover 2026-06-01, installed plugin `d924696`).** Probes run as background teammates in team `or-sas-spikes` against a shared worktree `.claude/worktrees/spike6-wt` (branch `or-sas-spike6`, created via `git worktree add`, registered in `git worktree list`).
+
+- **(a) `EnterWorktree` grantable via `tools:` frontmatter — YES.** The real `claude-toolkit:or-implementer` (frontmatter `tools: … EnterWorktree`) called it directly on its first action with **no `ToolSearch`**. Caveat worth recording: the harness *also* lists `EnterWorktree` in the deferred-tools system-reminder with a "calling directly will fail with InputValidationError" warning — **that warning is wrong for a frontmatter-listed tool**; the call executed and returned a domain result.
+- **(b) fresh-teammate starting CWD — the SHARED session working directory (NOT a private isolated worktree).** With the manager cleanly in the main checkout, a fresh teammate (`spike6-probe2`) started in the main checkout (`I:/Dev/claude-toolkit`, `master`).
+- **(c) auto-isolated by default — NO.** No teammate landed in a private per-agent worktree; they landed in the shared session cwd (main checkout, or the shared worktree once bound). `worktree.bgIsolation: "none"` was **not** needed.
+- **bind from main checkout — YES.** `EnterWorktree({path: …/spike6-wt})` from the main checkout returned *"Entered worktree at …spike6-wt on branch or-sas-spike6"* (genuine success, not a no-op); toplevel + branch flipped to the shared worktree.
+- **(d) shared branch state + commit — YES.** `spike6-probe2` saw `spike6-probe1`'s commit `c39c309` at log top and appended `43a0452`. Teammates operating in the worktree see and extend the same branch — supervisor/workers/reviewers will share one branch state.
+- **(e) path constraint — YES.** A directory under `.claude/worktrees/` created by `git worktree add` and registered in `git worktree list` is bindable via `EnterWorktree({path})`.
+
+**KEY DISCOVERY (refines the STEP -1 rationale, does NOT block GREEN): a background team teammate's `EnterWorktree` mutates the SHARED session working directory — the manager and all subsequently-spawned teammates — not just the calling teammate.** Evidence chain: after `spike6-probe2` (a teammate) bound into the worktree, (i) the manager shell's own cwd flipped to the worktree, (ii) plain bash `cd` back to the main checkout no longer persisted — the harness re-pinned the shell to the worktree, and (iii) the next teammate (`spike6-impl`) spawned **already inside** the worktree (its STEP -1 `EnterWorktree` was an idempotent no-op — *"is the current working directory"* — but its `git rev-parse --show-toplevel` check matched, so it correctly verdicted `BIND_OK`, never falsely `BLOCKED`). The manager returns to the main checkout with **`ExitWorktree({action:"keep"})`** (works even though a *teammate*, not the manager, performed the bind; preserves the branch/commits). This **contradicts** the `EnterWorktree` schema note ("from a pinned agent the switch only affects this agent, not the parent session") — background *team* teammates are NOT cwd-isolated; the team shares one working directory that both `cd` and any teammate's `EnterWorktree` mutate, and a teammate's bind escalates to an EnterWorktree-managed session binding for the whole team.
+
+- **Impact on the design — GREEN holds, arguably stronger.** The goal (supervisor + workers + reviewers all on the same shared branch/worktree) is achieved even more robustly: once *any* teammate binds, the whole session is in the worktree. STEP -1 remains correct as an **idempotent safeguard** (and the real agent handled the no-op case gracefully via its `rev-parse` verification — it did not false-block).
+- **Follow-up refinement (non-blocking, after the full suite):** the `or-implementer` STEP -1 rationale — *"a spawned teammate inherits the manager's CWD (the main checkout), NOT the worktree"* — is imprecise. A teammate inherits the **shared session cwd, which may already be the worktree** if an earlier teammate bound. Reword across all repo-touching agents carrying this note to: *"you inherit the shared session working directory, which may already be the worktree; call `EnterWorktree` to guarantee placement, then verify with `git rev-parse`."* Remove the "Verification pending (Item 1 / Spike 6)" markers now that Spike 6 is GREEN.
+- **Design risk flagged for the finisher:** because the shared cwd ends up bound to the worktree/feature branch, `or-finisher`'s merge step must first `ExitWorktree({action:"keep"})` (or otherwise operate in the main checkout) to merge into `master` — git forbids checking out `master` inside the worktree while it is checked out in the main checkout. Validate this when exercising the finisher.
 
 ---
 
@@ -122,6 +168,8 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 
 **Fallback:** If a truly-empty turn is rejected, the silence-on-idle discipline must be reworked — define the minimal accepted no-op and update the playbook's Idle Taxonomy + Communication Style. Until GREEN, treat silence-on-idle as load-bearing-and-unverified. **Do not declare the suite done until Spike 7 is GREEN.**
 
+**RESULT — ✅ GREEN (cutover 2026-06-01, plugin `d924696`).** Tested via a teammate (`s7-empty`, a manager-equivalent agent) instructed to emit a turn with **no text and no tool call**. The harness **accepted it cleanly** — the agent simply went idle, with **no error, no system-reminder forcing output, and no forced text**. It honored the instruction across **three** consecutive turns (including after an explicit "you MUST emit text" poke), and the harness accepted **every** empty turn without rejection or forced output. This behavioral evidence directly satisfies the GREEN condition (a no-output/no-tool turn is accepted); the repeated clean idles are stronger than a single verbal confirmation. The silence-on-idle conservation discipline is sound.
+
 ---
 
 ## Cutover checklist
@@ -136,3 +184,17 @@ Run once, at suite cutover (after the Plan 4 release), in order (design §"Cutov
 2. `claude plugin install claude-toolkit` (then restart the session so hooks load).
 3. Run **Spike 1 → Spike 7** above, plus Plan 1's deferred wrapper check (a live `Skill('claude-toolkit:dependency-research-methodology')` load and an `or-dependency-researcher` / `dependency-researcher` dispatch that returns a cited report from disk). Spikes 6–7 discharge remediation Items 1 and 8b respectively.
 4. Record each result inline in this doc. For any spike that fails, apply its **Fallback**, commit the fix, and re-run that spike. **Do not declare the suite done until Spikes 1–3, Spike 6 (worktree binding — top risk), and Spike 7 (empty idle turn) are GREEN** (Spikes 4–5 retain acceptable plain-text/frontmatter fallbacks).
+
+---
+
+## SUITE STATUS — ✅ MUST-PASS GATE COMPLETE (cutover 2026-06-01, installed plugin `d924696`)
+
+All must-pass spikes GREEN: **Spike 1 ✅, Spike 2 ✅, Spike 3 ✅, Spike 6 ✅ (top risk), Spike 7 ✅** — plus **Spike 5 ✅** (F7 auto-grant). The behavioral suite's must-pass gate is **complete**; design Items 1, 8b and impl-notes #3/#6/#9/#11 are discharged. Run as background teammates in team `or-sas-spikes` against a shared worktree under `.claude/worktrees/`.
+
+**Non-gate work — DONE 2026-06-03 on branch `or-sas-spike4-remediation` (one reviewed commit):**
+- **Spike 4 RUN — ❌ RED → remediated** (see Spike 4's RESULT block above). `AskUserQuestion` is main-loop-only (inert for one-shot subagents AND teammates); **preflight promoted to a teammate** that asks in plain text; inert `AskUserQuestion` frontmatter stripped from the phase agents + the general researchers. Open follow-up (non-blocking): an end-to-end preflight-teammate *dialogue* spike (confirmation only — mechanism already proven).
+- **Follow-up source edits (shipped in the same commit):**
+  1. Removed the discharged "**Verification pending (Item 1 / Spike 6)**" notes from all 8 repo-touching agents.
+  2. Refined the **STEP -1 rationale** in all 8: a teammate inherits the **shared session cwd** (possibly *already* the worktree if an earlier teammate bound — Spike 6); `EnterWorktree` is an idempotent safeguard confirmed with `git rev-parse`. Added the finisher exit-path note: a teammate's bind drags the whole session into the worktree, so `or-finisher` `ExitWorktree({action:"keep"})`s before merging into the base branch.
+  3. Dropped the redundant `TaskCreate, TaskUpdate, TaskList` from `or-supervisor` frontmatter (Spike 5 GREEN — Item 9.5).
+- **Committed** this validation doc together with the above (it was uncommitted on `master`).

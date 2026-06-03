@@ -23,7 +23,7 @@ When in doubt: shorter is better. Silence is best. Performance budget: 0–100k 
 
 ## Mode Detection
 
-The preflight subagent detects the run mode from the user's input and returns it in `PREFLIGHT_OK`. You never detect mode yourself — you read it from the block.
+The preflight teammate detects the run mode from the user's input and reports it in `PREFLIGHT_OK`. You never detect mode yourself — you read it from the block.
 
 | User input shape | Mode | Entry point |
 |------------------|------|-------------|
@@ -31,7 +31,7 @@ The preflight subagent detects the run mode from the user's input and returns it
 | Path to a spec file (`docs/superpowers/specs/*-design.md` or a user-supplied spec path) | `spec` | Phase 2 — Plan |
 | Path to a plan file (`docs/superpowers/plans/*.md` or a user-supplied plan path) | `plan` | Phase 3 — Implementation |
 
-If the input shape is ambiguous, preflight asks the user (`AskUserQuestion`) rather than guessing. The `PREFLIGHT_OK` block you receive:
+If the input shape is ambiguous, preflight asks the user in plain text (it is a teammate — `AskUserQuestion` is main-loop-only) rather than guessing. The `PREFLIGHT_OK` block you receive:
 
 ```
 PREFLIGHT_OK
@@ -52,9 +52,9 @@ conventions:
 
 You hold this block as the substrate for the next spawn-context — nothing more. You do NOT read `spec_path` or `plan_path` yourself (see Conservation Rules).
 
-## Initial Setup (first manager turn)
+## Initial Setup (opening manager turns)
 
-**Delegate preflight; do NOT run checks in your own context.** Mode detection, branch check, worktree setup, and metadata extraction are exactly the work that should burn a subagent's context, not yours.
+**Delegate preflight; do NOT run checks in your own context.** Mode detection, branch check, worktree setup, and metadata extraction are exactly the work that should burn the preflight teammate's context, not yours.
 
 ### Input (the skill's invocation arguments)
 
@@ -63,30 +63,37 @@ This skill is **user-invocable** (`/or-superpowers-at-scale [<idea> | <spec-path
 - **`<USER_INPUT>`** — the invocation argument: an **idea statement**, a **spec path** (`docs/superpowers/specs/*-design.md`), a **plan path** (`docs/superpowers/plans/*.md`), or **empty**. You do NOT classify it — you pass it verbatim into `preflight-brief.md`; preflight detects the mode (and asks the user if it is ambiguous).
 - **`<USER_CONSENT>`** — whether the user has pre-authorised working on `main`/`master`. **Default `"no"`** unless the user explicitly said otherwise. Passed into `preflight-brief.md`; preflight FAILs a default-branch base without consent.
 
-Substitute both into `preflight-brief.md` at step 1 below.
+Substitute both into `preflight-brief.md` at step 2 below.
 
-1. **Spawn the preflight subagent (foreground, blocking).** Load `assets/preflight-brief.md`, substitute `<USER_INPUT>` and `<USER_CONSENT>`, then:
+1. **`TeamCreate({team_name: <slug>})` first.** Derive `<slug>` from `<USER_INPUT>` (slugify the idea, or use the spec/plan filename stem; if input is empty, use `or-session`). The team must exist before you can spawn preflight as a teammate. Team creation always happens here, regardless of mode (it is not phase-1-specific); the worktree name is chosen later by preflight and need not match the team slug.
+
+2. **Spawn the preflight teammate.** Load `assets/preflight-brief.md`, substitute `<USER_INPUT>` and `<USER_CONSENT>`, then:
 
    ```
    Agent({
+     team_name: <slug>,
+     name: "or-preflight-1",
      subagent_type: "general-purpose",
      description: "Preflight for or-superpowers-at-scale",
-     prompt: <contents of preflight-brief.md, substituted>
+     prompt: <contents of preflight-brief.md, substituted>,
+     run_in_background: true
    })
    ```
 
-   No `team_name`, no `run_in_background` — a one-shot foreground agent that returns its structured summary. You absorb only the summary block, not the worktree-skill content or any tool output it produced.
+   Preflight is a **teammate**, not a one-shot subagent, because it must ask the user a few setup questions (mode-if-ambiguous, worktree name, base branch) in plain text — a one-shot subagent has no user channel, and `AskUserQuestion` is main-loop-only (Spike 4). It runs all checks in its own context and reports back via SendMessage; you absorb only its summary block, not the worktree-skill content or any tool output it produced.
 
-2. **Read the returned block.** If `PREFLIGHT_FAIL`, surface the one-line reason + suggested_recovery to the user and stop. If `PREFLIGHT_OK`, proceed.
+3. **Hand the user to preflight, then wait.** Emit one line — `Spawned or-preflight-1 (background) on team <TEAM> to set up the worktree. Talk to it directly — switch with Shift+Down.` — then go terse/idle and await preflight's `PREFLIGHT_OK` / `PREFLIGHT_FAIL` SendMessage.
 
-3. **`TeamCreate({team_name: <slug>})`** — slug from the plan/spec/worktree name. Team creation always happens here, regardless of mode (it is not phase-1-specific).
+4. **On preflight's report:**
+   - `PREFLIGHT_FAIL` → surface the one-line reason + suggested_recovery to the user, shut preflight down (`shutdown_request`), and stop.
+   - `PREFLIGHT_OK` → shut preflight down (`shutdown_request`), then proceed. You now hold the block (mode, worktree, branch, handover_dir, …).
 
-4. **Spawn the first agent for the mode** as a background teammate (opus) with the matching `assets/*-spawn-context.md` substituted from the `PREFLIGHT_OK` block:
+5. **Spawn the first agent for the mode** as a background teammate (opus) with the matching `assets/*-spawn-context.md` substituted from the `PREFLIGHT_OK` block:
    - `idea` → `or-brainstormer-1` (`brainstormer-spawn-context.md`)
    - `spec` → `or-plan-writer-1` (`plan-writer-spawn-context.md`)
    - `plan` → `or-supervisor-1` (`supervisor-spawn-context.md`)
 
-5. **Emit the single first-session message for the mode**, then revert to terse protocol (and silence during phases 1/2):
+6. **Emit the single first-session message for the mode**, then revert to terse protocol (and silence during phases 1/2):
    - `idea`: `Spawned or-brainstormer-1 (opus, background) on team <TEAM>. Talk to it directly — switch with Shift+Down. It's driving Phase 1.`
    - `spec`: `Spawned or-plan-writer-1 (opus, background) on team <TEAM>. Talk to it directly — switch with Shift+Down. It's driving Phase 2.`
    - `plan`: `Spawned or-supervisor-1 (opus, background) on team <TEAM>. Standing by.`
@@ -121,6 +128,7 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 
 | Wake-up source | Bucket | Manager response |
 |---|---|---|
+| Preflight `PREFLIGHT_OK` / `PREFLIGHT_FAIL` | Action | OK: shut preflight down, then spawn the first-phase agent (Initial Setup). FAIL: surface reason + recovery, shut preflight down, stop |
 | `SPAWN` (supervisor) | Action | Spawn worker; reply `Spawned: <name>` |
 | `SPAWN_RESEARCH` (phase agent) | Action | Spawn researcher; reply `Spawned: <name>` |
 | `RESEARCH_DONE` / `RESEARCH_BLOCKED` (research teammate) | Action | Relay `Research <name> done: <path>`, then shut the researcher down |
@@ -134,7 +142,7 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 | Finisher `SHIP_COMPLETE` | Action | Shut the finisher down; **end the session** — the workflow is complete |
 | Finisher `FINISHER_HANDOVER` (rare) | Action | Shut it down; spawn `or-finisher-(N+1)` on the same spawn-context — it re-runs finishing |
 | User message addressed to the manager during phase 1/2 | Action | Reply ONCE with the redirect nudge; do not relay |
-| Worker/research boot, `shutdown_response`, termination; supervisor turning internally; teammate progress; hook/system reminders; phase-agent ↔ user dialogue events | Idle | No output, no tool calls |
+| Worker/research/preflight boot, `shutdown_response`, termination; supervisor turning internally; teammate progress; hook/system reminders; phase-agent / preflight ↔ user dialogue events | Idle | No output, no tool calls |
 
 **Plan→implementation go-ahead (the one gated transition).** After `PLAN_COMPLETE` (modes `idea`/`spec`), before spawning the supervisor, surface a single line — e.g. `Plan approved at <path>. Start implementation? It will run multiple tasks autonomously.` — and wait for the user's go-ahead. This gates only this one expensive, hard-to-pause transition; it does NOT gate any normal in-flow action (local commits the underlying skills make stay ungated). Mode `plan` has no such gate — invoking the command with a plan path is itself the go-ahead, so spawn `or-supervisor-1` directly.
 

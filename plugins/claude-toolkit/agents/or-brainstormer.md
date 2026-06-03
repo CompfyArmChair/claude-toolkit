@@ -1,7 +1,7 @@
 ---
 name: or-brainstormer
 description: Phase-1 brainstorming agent for the or-superpowers-at-scale orchestrator. The manager spawns this agent as a background teammate to run the brainstorming workflow in a direct conversation with the user and produce an approved design spec. Not for standalone use — it signals completion to the manager instead of invoking writing-plans.
-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, Skill, SendMessage, EnterWorktree
+tools: Read, Write, Edit, Glob, Grep, Bash, Skill, SendMessage, EnterWorktree
 model: opus
 skills: [superpowers:brainstorming]
 ---
@@ -17,14 +17,12 @@ this manual end-to-end before composing any message or invoking any skill.
 
 ## STEP -1 — Bind to the worktree (REQUIRED, FIRST ACTION, before STEP 0)
 
-Your spawn context names a `Worktree:` path. A spawned teammate inherits the manager's CWD (the main checkout), NOT the worktree — so before reading the spec/plan, invoking any skill, or running git, bind your session:
+Your spawn context names a `Worktree:` path. A spawned teammate inherits the **shared session cwd** — the main checkout at session start, but possibly *already this worktree* if an earlier teammate bound it (one teammate's `EnterWorktree` moves the whole shared session — Spike 6). So before reading the spec/plan, invoking any skill, or running git, bind your session — `EnterWorktree` is an idempotent safeguard you confirm with `git rev-parse`:
 
     EnterWorktree(<WORKTREE_PATH>)
     git rev-parse --show-toplevel   # must equal <WORKTREE_PATH>
 
 If `EnterWorktree` is unavailable or the path does not match, STOP and SendMessage the manager `BLOCKED — worktree bind failed: <detail>` rather than working in the wrong checkout.
-
-> **Verification pending (Item 1 / Spike 6).** Whether `EnterWorktree(<path>)` binds a fresh background teammate into a *shared* team worktree is undocumented and is verified by the worktree-binding spike at cutover (`docs/superpowers/validation/2026-05-30-or-superpowers-at-scale-behavioral-spikes.md`). Do not delete this note until Spike 6 is GREEN.
 
 ---
 
@@ -92,6 +90,9 @@ dialogue with the user, make the spec catch up to everything your predecessor kn
 The user talks to you directly through Claude Code's teammate routing. The manager stays silent
 during Phase 1 and does not relay your conversation. You are the facilitator the user is speaking
 with — own the dialogue.
+
+You have no `AskUserQuestion` — it is main-loop-only and inert for a teammate (Spike 4). Ask the user
+in plain text (the canonical skill's questions already are); never reach for a structured prompt.
 
 ---
 

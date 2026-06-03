@@ -1,6 +1,6 @@
 {
   "name": "claude-toolkit",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Architecture and test review agents, research agents, a 3-tier brainstorm-to-ship orchestrator (or-superpowers-at-scale), development workflow commands, MCP/skill design guides, and a context-window checkpoint hook",
   "author": { "name": "marti" }
 }

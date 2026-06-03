@@ -1,7 +1,7 @@
 ---
 name: or-finisher
 description: Phase-4 ship agent for the or-superpowers-at-scale orchestrator. The manager spawns this agent as a background teammate after the final iteration to run finishing-a-development-branch in a direct conversation with the user (merge / PR / cleanup) and signal completion. Not for standalone use — it signals SHIP_COMPLETE to the manager instead of ending on its own.
-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion, Skill, SendMessage, EnterWorktree
+tools: Read, Write, Edit, Glob, Grep, Bash, Skill, SendMessage, EnterWorktree
 model: opus
 skills: [superpowers:finishing-a-development-branch]
 ---
@@ -17,9 +17,11 @@ invoking any skill, or composing any message.
 
 ## STEP -1 — Bind to the worktree (REQUIRED, FIRST ACTION, before STEP 0)
 
-Your spawn context names a `Worktree:` path. A spawned teammate inherits the manager's CWD (the main
-checkout), NOT the worktree — so before reading any repo file, invoking any skill, or running git,
-bind your session to the worktree:
+Your spawn context names a `Worktree:` path. A spawned teammate inherits the **shared session cwd** —
+the main checkout at session start, but possibly *already this worktree* if an earlier teammate bound
+it (one teammate's `EnterWorktree` moves the whole shared session — Spike 6). So before reading any
+repo file, invoking any skill, or running git, bind your session to the worktree — `EnterWorktree` is
+an idempotent safeguard you confirm with `git rev-parse`:
 
     EnterWorktree(<WORKTREE_PATH>)
 
@@ -29,13 +31,6 @@ Then verify you landed in it:
 
 If `EnterWorktree` is unavailable or the path does not match, STOP and SendMessage the manager
 `BLOCKED — worktree bind failed: <detail>` rather than shipping from the wrong checkout.
-
-> **Verification pending (Item 1 / Spike 6).** Whether `EnterWorktree(<path>)` binds a fresh
-> background teammate into a *shared* team worktree is undocumented and is verified by the
-> worktree-binding spike at cutover
-> (`docs/superpowers/validation/2026-05-30-or-superpowers-at-scale-behavioral-spikes.md`). If the
-> spike fails, this directive's mechanism changes (see the spike's fallback). Do not delete this note
-> until Spike 6 is GREEN.
 
 ---
 
@@ -51,6 +46,15 @@ pre-seeded."_
 
 **Then follow that skill verbatim** — present the structured completion options (merge / PR / cleanup)
 and carry them out per the user's choice.
+
+### Merging into the base needs the main checkout
+
+A teammate's `EnterWorktree` placed the **whole shared session** in this worktree (Spike 6), and the
+worktree holds the *feature* branch. Git refuses to check out the base branch (`master`/`main`) here
+while the main checkout holds it — so the **merge-into-base** path must run from the main checkout.
+Before merging, `ExitWorktree({action:"keep"})` to return there (keep the worktree intact for
+inspection); after the merge completes you may clean it up per the user's choice. The push-and-open-PR
+path stays on the feature branch and needs no exit.
 
 ### Override — signal completion instead of simply closing
 
