@@ -44,6 +44,14 @@ Reset: if current usage falls below 50% of any previously announced threshold
 (e.g. after /compact or /rewind), all tracked thresholds reset - and the
 reset is persisted immediately, so turn-end detection (which announces
 nothing below 200k that could piggyback persistence) re-arms too.
+
+Malformed input (non-dict state file / stdin payload / transcript entry,
+non-numeric usage field) degrades gracefully - fresh state, skipped entry,
+or field counted as 0 - with a one-line stderr breadcrumb naming what was
+malformed (visible under claude --debug; exit code stays 0). The breadcrumb
+exists because the likeliest trigger is transcript-format drift in a future
+Claude Code release, whose natural symptom - checkpoints silently never
+firing again - is exactly the starvation this hook exists to fix (F20/F22).
 """
 
 import json
@@ -138,13 +146,29 @@ EVENT_STATE_KEYS = {
 }
 
 
+def warn(message: str) -> None:
+    """Debug breadcrumb for malformed input (exit code stays 0, so this is
+    invisible in normal use and shows only under claude --debug)."""
+    print(f"context-usage: {message}", file=sys.stderr)
+
+
 def total_tokens(usage: dict) -> int:
-    return (
-        (usage.get("input_tokens") or 0)
-        + (usage.get("cache_creation_input_tokens") or 0)
-        + (usage.get("cache_read_input_tokens") or 0)
-        + (usage.get("output_tokens") or 0)
-    )
+    total = 0
+    non_numeric = []
+    for field in (
+        "input_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+        "output_tokens",
+    ):
+        value = usage.get(field)
+        if isinstance(value, (int, float)):
+            total += value
+        elif value is not None:  # absent fields are normal; wrong types are not
+            non_numeric.append(field)
+    if non_numeric:
+        warn(f"non-numeric usage field(s) counted as 0: {', '.join(non_numeric)}")
+    return int(total)
 
 
 def state_path(session_id: str) -> Path:
@@ -156,6 +180,9 @@ def load_state(session_id: str) -> dict:
     try:
         data = json.loads(state_path(session_id).read_text(encoding="utf-8"))
     except Exception:
+        return {k: 0 for k in STATE_KEYS}
+    if not isinstance(data, dict):
+        warn("malformed state file (not a JSON object) - using fresh state")
         return {k: 0 for k in STATE_KEYS}
     # Migrate legacy single-event state.
     if "last_announced" in data and STATE_KEY_PROMPT not in data:
@@ -187,6 +214,7 @@ def emit_for(event_name: str, message: str) -> str:
 
 def latest_main_thread_usage(transcript: Path) -> dict | None:
     latest = None
+    malformed = 0
     try:
         with transcript.open("r", encoding="utf-8") as f:
             for line in f:
@@ -194,16 +222,25 @@ def latest_main_thread_usage(transcript: Path) -> dict | None:
                     entry = json.loads(line)
                 except Exception:
                     continue
+                if not isinstance(entry, dict):
+                    malformed += 1
+                    continue
                 if entry.get("type") != "assistant":
                     continue
                 if entry.get("isSidechain"):
                     continue
-                msg = entry.get("message") or {}
+                msg = entry.get("message")
+                if not isinstance(msg, dict):
+                    if msg is not None:  # absent message is normal shape
+                        malformed += 1
+                    continue
                 usage = msg.get("usage")
                 if isinstance(usage, dict):
                     latest = usage
     except Exception:
         return None
+    if malformed:
+        warn(f"skipped {malformed} malformed transcript line(s)")
     return latest
 
 
@@ -223,6 +260,9 @@ def main() -> int:
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        return 0
+    if not isinstance(payload, dict):
+        warn("malformed stdin payload (not a JSON object) - ignoring event")
         return 0
 
     event_name = payload.get("hook_event_name") or EVENT_PROMPT
