@@ -1,5 +1,5 @@
 {
-  "description": "Context-window checkpoint hook — announces once per session, per event, when main-thread token usage crosses 100k / 200k / 250k / 300k.",
+  "description": "Context-window checkpoint hook — announces once per session, per event, when main-thread token usage crosses 100k / 200k / 250k / 300k. Turn-end events (Stop/SubagentStop) deliver actionable (≥200k) crossings as decision:block, forcing the handover turn (E2E F20/F22).",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -19,6 +19,28 @@
             "type": "command",
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/context-usage.py\"",
             "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/context-usage.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/context-usage.py\"",
+            "timeout": 5
           }
         ]
       }
