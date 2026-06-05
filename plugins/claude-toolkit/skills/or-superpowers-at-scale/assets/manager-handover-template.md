@@ -10,6 +10,14 @@ active_phase_agent: <name of currently-alive phase agent or finisher, or none>
 
 # Manager Handover <N>
 
+## Resume invocation (user: paste this after `/clear`)
+
+```
+/claude-toolkit:or-superpowers-at-scale <ABS_PATH_TO_THIS_DOC>
+```
+
+(Writing manager: substitute the literal absolute path of this file. The fresh manager detects the `manager-handover-*.md` argument and branches straight to Fresh-Manager-Resume — no preflight, no TeamCreate.)
+
 ## Topology & Protocol Reference
 
 This workflow runs under the `or-superpowers-at-scale` skill (part of the `claude-toolkit` plugin). The skill's `SKILL.md` is the manager's playbook; its `assets/` directory contains the spawn / SPAWN_RESEARCH protocol, the preflight brief, the spawn-context templates, and the handover templates.
@@ -49,13 +57,15 @@ A fresh manager uses this to decide whether to expect a phase agent alive in the
 - Latest iteration doc: `<path/to/iteration-<N>.md>`
 - Last reported status: `<summary>`
 
-### Workers (alive at handover)
+### Live roster at handover (canonical — REQUIRED, every member; F28)
 
-| Name | Role | Status |
-|------|------|--------|
-| `<name>` | `<role>` | `<DONE | working | idle>` |
+Enumerate **every** member from a live read of `~/.claude/teams/<team>/config.json` at write time — never from memory. One disposition line per member. The successor runs a names-only delta-check against this table and reads member detail only for deltas.
 
-(Workers reported DONE should already be shutdown — list only those genuinely mid-work.)
+| Name | Role | Disposition | Note |
+|------|------|-------------|------|
+| `<name>` | `<role>` | `keep` / `reap` / `zombie` / `live-worker` | `<one line>` |
+
+Dispositions: `keep` = the resume needs it alive (e.g. the active phase agent); `reap` = orphan — successor issues `shutdown_request`; `zombie` = ignores `shutdown_request` — successor tolerates, max 2 attempts (F23); `live-worker` = genuinely mid-work.
 
 ### Recent SPAWN / shutdown history (last 5–10 events)
 
