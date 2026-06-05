@@ -23,13 +23,14 @@ When in doubt: shorter is better. Silence is best. Performance budget: 0–100k 
 
 ## Mode Detection
 
-The preflight teammate detects the run mode from the user's input and reports it in `PREFLIGHT_OK`. You never detect mode yourself — you read it from the block.
+The preflight teammate detects the run mode from the user's input and reports it in `PREFLIGHT_OK`. You never detect mode yourself — you read it from the block. **Exception — `resume` (F11):** a `manager-handover-*.md` path is detected by YOU, before any preflight exists (see the Initial Setup pre-check); preflight never sees it.
 
 | User input shape | Mode | Entry point |
 |------------------|------|-------------|
 | Plain text (idea statement) or no input | `idea` | Phase 1 — Brainstorm |
 | Path to a spec file (`docs/superpowers/specs/*-design.md` or a user-supplied spec path) | `spec` | Phase 2 — Plan |
 | Path to a plan file (`docs/superpowers/plans/*.md` or a user-supplied plan path) | `plan` | Phase 3 — Implementation |
+| Path to a manager handover doc (`*manager-handover-*.md`) | `resume` | Fresh-Manager-Resume — no preflight, no TeamCreate (Initial Setup pre-check) |
 
 If the input shape is ambiguous, preflight asks the user in plain text (it is a teammate — `AskUserQuestion` is main-loop-only) rather than guessing. The `PREFLIGHT_OK` block you receive:
 
@@ -64,6 +65,8 @@ This skill is **user-invocable** (`/or-superpowers-at-scale [<idea> | <spec-path
 - **`<USER_CONSENT>`** — whether the user has pre-authorised working on `main`/`master`. **Default `"no"`** unless the user explicitly said otherwise. Passed into `preflight-brief.md`; preflight FAILs a default-branch base without consent.
 
 Substitute both into `preflight-brief.md` at step 2 below.
+
+0. **Resume pre-check (F11, before anything else).** If `<USER_INPUT>` is a path matching `manager-handover-*.md`, this is a **resume**: the team, worktree, and handover dir already exist — there is nothing to set up. Do NOT TeamCreate, do NOT spawn preflight; jump straight to "Handover Ladder → Fresh manager resume" with that doc. (The handover template's header carries this invocation pre-filled, so the user pastes it after `/clear`.)
 
 1. **`TeamCreate({team_name: <slug>})` first.** Derive `<slug>` from `<USER_INPUT>` (slugify the idea, or use the spec/plan filename stem; if input is empty, use `or-session`). The team must exist before you can spawn preflight as a teammate. Team creation always happens here, regardless of mode (it is not phase-1-specific); the worktree name is chosen later by preflight and need not match the team slug.
 
@@ -233,11 +236,18 @@ Templates are bundled at `assets/{iteration,manager,brainstormer,plan-writer}-ha
 
 Then write `manager-handover-<N>.md` (template at `assets/manager-handover-template.md` — it adds `active_phase` + `active_phase_agent`, and its header carries the copy-pasteable resume invocation), and tell the user: `Manager context >200k — recommend fresh session. Resume by pasting the invocation at the top of manager-handover-<N>.md.` That single line is the handover's only user-facing output — it is a **notice, not a question**; no user go-ahead gates any handover step.
 
-**Fresh manager resume.** Read `manager-handover-<N>.md`; identify `active_phase` / `active_phase_agent`. Confirm identities via `~/.claude/teams/<team>/config.json`. **Reap orphans first.** Before spawning the successor, enumerate **ALL** members in `~/.claude/teams/<team>/config.json` — not just the active depth-1 tier — and issue `shutdown_request` to every orphaned teammate the interrupted session left alive (stale implementers, reviewers, researchers, a prior phase agent / supervisor / finisher). A fresh manager inherits no roster knowledge, so orphans left alive bloat it immediately. Then spawn the `N+1` successor (`or-<phase>-N+1` pointing at the phase-agent handover doc + artifact, or `or-supervisor-N+1` pointing at the latest `iteration-N.md`), and resume the broker role. (The new phase agent runs its flush-on-resume + latest-revision cross-check before reopening dialogue.) If `active_phase` is `ship`, spawn `or-finisher-(N+1)` pointing at the plan + the latest `iteration-N.md` (it re-runs finishing on the existing branch).
+**Fresh manager resume** (entered via the `resume` pre-check, or any time the user points you at a `manager-handover-*.md`). Read `manager-handover-<N>.md`; identify `active_phase` / `active_phase_agent` and the **enumerated live-roster table** (one disposition line per member — canonical and required in the template, F28). **Reap orphans first — by live enumeration, made cheap by the captured roster (F21/F28).** Reap-by-enumeration is the **one sanctioned manager-originated teardown** — the explicit, documented exception to the pure-broker rule (F25): a dead session has no live supervisor to request it. Procedure:
+
+1. **Names-only delta-check:** Grep the member `name` fields out of `~/.claude/teams/<team>/config.json` (a handful of lines — do NOT full-read the verbose config) and diff them against the handover's roster table.
+2. **Read full member detail only for a delta** — a live member the handover didn't list, or a listed member now gone. The delta is exactly the orphan/zombie set to act on.
+3. Issue `shutdown_request` to every orphaned teammate the interrupted session left alive (stale implementers, reviewers, researchers, a prior phase agent / supervisor / finisher). The captured roster makes the live check **cheap**; it never **replaces** it — config lags reality (F21: during the E2E run, live enumeration caught two real orphans the handover doc did not expect).
+
+Then spawn the `N+1` successor (`or-<phase>-N+1` pointing at the phase-agent handover doc + artifact, or `or-supervisor-N+1` pointing at the latest `iteration-N.md`), and resume the broker role. (The new phase agent runs its flush-on-resume + latest-revision cross-check before reopening dialogue.) If `active_phase` is `ship`, spawn `or-finisher-(N+1)` pointing at the plan + the latest `iteration-N.md` (it re-runs finishing on the existing branch).
 
 ## Recovery from Common Gotchas
 
 - **Any orphaned member (phase agent, supervisor, finisher, worker, researcher) still alive on resume:** check `~/.claude/teams/<team>/config.json` members; `shutdown_request` each orphan before spawning the `N+1` successor.
+- **A handover-inherited zombie ignores `shutdown_request` (F23, harness limitation):** an in-process orphan can emit an idle "available" instead of terminating, and no force-terminate path exists. Tolerate it: at most **2** shutdown attempts, then stop; treat its idle pings as idle (no output, no spam); **flag it in your next manager-handover doc's roster as `zombie`** so the successor does not re-attempt.
 - **Handover doc written mid-flight is stale:** verify HEAD with `git log --oneline <base>..HEAD` before briefing the successor; pass the corrected HEAD in its spawn-context.
 - **TaskList `in_progress` reverts on system reminders:** cosmetic; ignore. The supervisor owns the TaskList.
 - **Team board auto-flips a task `completed` when a worker exits (F14, harness side effect):** noise, not progress. The supervisor re-asserts `in_progress` and owns board truth; the manager takes no action.
