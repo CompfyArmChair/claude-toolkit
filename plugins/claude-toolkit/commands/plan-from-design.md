@@ -1,3 +1,7 @@
+---
+description: Create an implementation plan from the tracked design doc via superpowers:writing-plans
+---
+
 # /plan-from-design - Create Implementation Plan from Design Doc
 
 Wrapper around superpowers:writing-plans that uses the tracked design doc and tracks the created plan.

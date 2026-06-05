@@ -1,3 +1,7 @@
+---
+description: Execute the tracked plan via superpowers:subagent-driven-development, with a post-implementation report
+---
+
 # /implement-from-plan - Execute Plan with Subagent-Driven Development
 
 Wrapper around superpowers:subagent-driven-development that uses the tracked plan and clears the pointer on completion.

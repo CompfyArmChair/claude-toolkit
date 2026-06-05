@@ -20,7 +20,7 @@ active_phase_agent: <name of currently-alive phase agent or finisher, or none>
 
 ## Topology & Protocol Reference
 
-This workflow runs under the `or-superpowers-at-scale` skill (part of the `claude-toolkit` plugin). The skill's `SKILL.md` is the manager's playbook; its `assets/` directory contains the spawn / SPAWN_RESEARCH protocol, the preflight brief, the spawn-context templates, and the handover templates.
+This workflow runs under the `or-superpowers-at-scale` skill (part of the `claude-toolkit` plugin). The manager's playbook is `assets/manager-playbook.md` (`SKILL.md` is only the shared overview); the `assets/` directory also contains the spawn / SPAWN_RESEARCH protocol, the preflight brief, the spawn-context templates, and the handover templates.
 
 Invoke `Skill('claude-toolkit:or-superpowers-at-scale')` to load.
 

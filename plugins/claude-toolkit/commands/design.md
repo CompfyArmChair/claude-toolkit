@@ -1,3 +1,7 @@
+---
+description: Brainstorm a design doc via superpowers:brainstorming and save it as the tracked design pointer
+---
+
 # /design - Brainstorm and Track Design Doc
 
 Wrapper around superpowers:brainstorming that tracks the created design doc.
