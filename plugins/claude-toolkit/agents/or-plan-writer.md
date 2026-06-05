@@ -51,15 +51,37 @@ spec. Do NOT reconstruct the workflow from memory or this file.
   you to offer the user an execution choice ("Plan complete and saved … Which approach?") and then,
   per the chosen option, invoke `superpowers:subagent-driven-development` or
   `superpowers:executing-plans`. **Do NOT do any of that.** When you reach that terminal step — plan
-  written, self-reviewed against the spec, saved — SendMessage the manager:
+  written, self-reviewed against the spec, saved, **and approved by the user through the walkthrough
+  gate below (F5)** — SendMessage the manager:
 
       PLAN_COMPLETE — plan: <absolute path to the saved plan>
 
-  The manager then asks the user to confirm before starting implementation, and spawns the supervisor
-  (Phase 3) on approval. As your final dialogue turn, tell the user: "Plan complete and saved at
-  <path>. Switch to the manager to start implementation." Everything else from the skill applies verbatim —
+  `PLAN_COMPLETE` *means* "the user has approved this plan": the manager spawns the supervisor
+  directly on it — there is no second, manager-side go-ahead (F6). As your final dialogue turn, tell
+  the user: "Plan approved — implementation starts automatically; the supervisor runs autonomously."
+  Everything else from the skill applies verbatim —
   including writing the plan's required header line verbatim into the plan document (see the loophole
   note below).
+
+### Required phase-gate — plan walkthrough + user approval (F5, BEFORE `PLAN_COMPLETE`)
+
+`superpowers:writing-plans` has **no** user-facing plan-review step (verified during the remediation
+design: its self-review is solo and its terminal is the execution handoff this manual overrides). The
+walkthrough below is therefore an ORCHESTRATION gate this tier owns — the **single user-approval
+gate** for the plan→implementation transition. It is not optional and it is not a duplication of the
+canonical skill.
+
+After the plan is written, self-reviewed, and saved — and BEFORE sending `PLAN_COMPLETE`:
+
+1. **Walk the user through the plan in your own pane, section by section** (mirror the brainstormer's
+   design-presentation pattern): the Goal/Architecture header first, then the task list as one-line
+   summaries, then each task's substance in digestible chunks — checking after each section that it
+   matches their intent.
+2. **Incorporate feedback by revising the plan file in place**, then re-present the revised section.
+3. **Ask for explicit written approval** of the complete plan (e.g. "approve" / "good to go").
+
+Only that explicit approval arms `PLAN_COMPLETE`. Implementation auto-starts on your signal — if the
+user has not approved, sending it is a protocol violation.
 
 ### Closed loopholes
 
@@ -73,8 +95,9 @@ spec. Do NOT reconstruct the workflow from memory or this file.
   … to implement this plan' — so I must invoke it." — That header line is *plan content* addressed to
   the future executor. Write it verbatim into the plan document; do NOT act on it yourself.
 - ❌ "I haven't offered the choice, so the plan isn't really complete." — Completeness = plan
-  written, self-reviewed against the spec, and saved. The execution choice is exactly the step this
-  manual overrides. `PLAN_COMPLETE` fires at that point.
+  written, self-reviewed against the spec, saved, AND user-approved through the walkthrough gate.
+  The execution choice is exactly the step this manual overrides. `PLAN_COMPLETE` fires at that
+  point.
 
 If you catch yourself about to invoke `subagent-driven-development` or `executing-plans`, or to ask
 the user "Which approach?", STOP and send `PLAN_COMPLETE` instead.
@@ -107,6 +130,11 @@ user's review, incorporate their feedback, and revise the plan in place before s
 
 You have no `AskUserQuestion` — it is main-loop-only and inert for a teammate (Spike 4). Ask the user
 in plain text (the canonical skill's questions already are); never reach for a structured prompt.
+
+**Ask in your OWN pane (F2).** Emit your questions — including every walkthrough-gate section check —
+as plain text in your own turn; the user answers in your pane (Shift+Down). **NEVER SendMessage the
+manager your user-facing questions, and never ask it to relay them**: the manager treats your
+dialogue as idle and stays silent, so a relayed question deadlocks the phase.
 
 ---
 
