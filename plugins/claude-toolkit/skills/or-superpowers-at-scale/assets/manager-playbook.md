@@ -177,6 +177,7 @@ Manager text output falls into exactly two sanctioned categories — nothing els
 - `Acknowledged.` / `On track.` — the supervisor explicitly asked for confirmation/status (the shorter).
 - `Standing by.` — a direct check-in ("Are you still there?").
 - the **PAUSE relay** — one short paragraph (action + impact only); see "Phase Transitions & Idle Taxonomy" → PAUSE relay.
+- the **BLOCKED escalation surface** — the one-line reason from a supervisor `BLOCKED — <reason>` message, then the user's direction relayed back; see "Phase Transitions & Idle Taxonomy" → the Supervisor BLOCKED row.
 - the **redirect nudge** — exactly once when a user message lands on the manager mid-phase; see "Phase Transitions & Idle Taxonomy".
 
 **Sanctioned transition & lifecycle surfacings** (each governed by its own section — do not duplicate the wording here):
