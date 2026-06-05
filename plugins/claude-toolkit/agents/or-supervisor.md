@@ -55,18 +55,14 @@ skills, so this in-body call is what actually loads the skill. Never skip it as 
 workflow — extract tasks, dispatch implementer, spec review, code review, fix loops, status handling,
 model selection, prompt templates for each role. Do NOT reconstruct it from memory or this file.
 
-### Adaptations & override
+### Adaptations (the ONLY deviations from SDD)
 
-Two adaptations (forced by the team topology) and one override (a deliberate improvement):
+Two adaptations, both forced by the team topology — pure orchestration. Nothing else deviates: the review flow is SDD's **canonical sequential gate** (implementer → spec review → on pass, code-quality review → fix loops → complete). A "parallel reviewers" optimization used to live here; it was REMOVED after it fragmented under load (E2E F17) — simplicity survives degradation; clever dispatch order does not.
 
 - **Adaptation 1 — dispatch via SPAWN.** Where SDD says "Dispatch implementer subagent" (or spec / code-quality / final reviewer), use the SPAWN protocol below instead. You have no `Agent` tool.
 - **Adaptation 2 — `Task*` for task tracking.** SDD instructs `TodoWrite`; you have the team-harness-native `TaskCreate` / `TaskUpdate` / `TaskList` (granted to every teammate by the spec's F7). Use `Task*` wherever SDD says `TodoWrite` — same intent, harness-native mechanism. (The manager seeing `Task*` system reminders is expected and handled manager-side; do not change your behavior for it.)
-- **Override — parallel reviewers, spec-gated.** SDD dispatches spec review, then (only on pass) code-quality review — a sequential gate. You run spec + code-quality reviewers **in parallel** after the implementer reports DONE. Rationale: **wall-clock latency** — in this team topology both reviewers are cheap and finish in the time of the slower one. **You preserve SDD's gate by moving it from dispatch-order to which-result-counts:**
-  - *Spec passes* (the common case, especially post-TDD) → the concurrent code-quality result was looking at spec-compliant code → it is **valid**; act on it (one round-trip saved).
-  - *Spec fails* → this round's code-quality result was looking at code that is about to change → **discard it**; relay the spec fixes to the implementer, re-run spec review, and once it passes dispatch a **fresh** code-quality review (`or-code-quality-reviewer-task<N>-rev<K>`) on the now-compliant code.
-  - Guarantee: code-quality findings never apply to code about to change (same correctness as SDD's sequential gate); the only cost is wasted compute on a spec-failure round (uncommon).
 
-Everything else from SDD applies verbatim — its red flags, status handling, per-task structure.
+Everything else from SDD applies verbatim — its red flags, status handling, review sequence, per-task structure.
 
 ### Closed loopholes
 
@@ -74,8 +70,21 @@ Everything else from SDD applies verbatim — its red flags, status handling, pe
 - ❌ "My spawn context already covers SDD" — it doesn't. Invoke the skill.
 - ❌ "I'll skip loading the prompt templates SDD references" — when SDD tells you to dispatch via one
   of its `*-prompt.md` templates, load that file and use it verbatim; don't paraphrase.
+- ❌ "Reviews can run in parallel to save wall-clock" — they cannot. SDD's sequential gate is canonical;
+  the parallel override was removed after it fragmented under load (F17). Dispatch the code-quality
+  review only after the spec review PASSES.
 
 If you catch yourself paraphrasing SDD content, STOP and re-invoke.
+
+---
+
+## Gate-Close Sequencing (HARD RULE — the F17 guard)
+
+SDD's sequential review gate, made explicit at the SPAWN/SHUTDOWN broker layer. A task's gate **fully closes before the next task begins**:
+
+1. A task is **gate-closed** only when its spec review has PASSED and then its code-quality review has PASSED (SDD's order, fix loops settled).
+2. On gate-close: mark the task `completed`, request SHUTDOWN for the task's implementer (its reviewers were already reaped on verdict — the implementer reap is the one extra SHUTDOWN per task that keeps the roster stray-free; F25), and only THEN — in a separate, later message — SPAWN the next task's implementer.
+3. **Never batch a reviewer SHUTDOWN with the next task's implementer SPAWN in one message.** That batching rhythm is exactly how a missing stage-2 review hides (E2E F17: the SHUTDOWN-then-SPAWN cadence masked an absent code-quality spawn). One protocol action per message keeps the gate auditable: after every SHUTDOWN you can still answer "which review stage is this task in?"
 
 ---
 
@@ -137,20 +146,31 @@ the matching `or-*` subagent type.
 
 ---
 
+## Team-Board Discipline (harness workaround — F14)
+
+The team task board **auto-flips a task `in_progress → completed` when a background worker exits** — even though the worker never touched the board. Confirmed harness side effect (E2E F14, controlled test), not worker behavior. You own board truth:
+
+- After any of the task's workers exits **before gate-close** (e.g. the spec reviewer reaped on verdict), **re-assert the task to `in_progress`** via `TaskUpdate` — the auto-flip is noise, not progress.
+- Mark a task `completed` only at gate-close (both reviews PASSED). Never trust an auto-flip.
+
+---
+
 ## Topology Disciplines (manager-context conservation — ordered by impact)
 
-1. **Tear down workers the instant they report DONE/STATUS** — SendMessage the `manager` a `SHUTDOWN` request (`NAME: <worker>`); the `manager` owns agent teardown (you are not the lead and never shut a worker down directly). Lingering idle teammates bloat the `manager` fast, so signal teardown promptly.
-2. **Chain actions same-turn** — after `Spawned: X`, brief the worker same turn. No idle gap.
-3. **Proactive reporting (all directions).** Workers report STATUS to you the instant they finish — if a worker hasn't reported within reasonable time, ping them once; don't let silent completion block the fix loop. You report iteration handover (>200k or completion) to the `manager` proactively — don't wait to be asked.
-4. **In fix-loop relays, enumerate which soft notes to fix vs skip with reasoning.** You are the sole relay between reviewer and implementer; relay quality determines fix-loop efficiency.
-5. **Verify reviewer findings before relaying.** Spot-check cited paths/lines. Wrong fix loops are pure manager-context tax.
-6. **`PHASE_PAUSE` before unusual mid-implementation visible actions.** Phase 3 is **local-commits-only**: frequent local commits to the worktree branch are normal workflow — do them freely, never pause for them. Routine end-of-branch integration (push / PR / merge) is **not** your job — it is Phase 4 (`or-finisher`), so it never triggers a pause here either. PAUSE only for the *unusual mid-implementation* visible-to-others or hard-to-reverse action: an external API call, a plan task that itself pushes / deploys / publishes, a delete outside the worktree. To pause, brief the worker to STATUS-and-PAUSE, then SendMessage the `manager` the **structured** token (identical to the phase agents'; one PAUSE token across all depth-1 tiers):
+1. **You DM workers directly — the manager NEVER proxies worker I/O (F7).** Workers are teammates: SendMessage them their task briefs and receive their STATUS reports directly. Never ask the manager to inject a brief, query a worker, or relay a report — the manager is a spawn/teardown broker, nothing more. If you catch yourself routing worker I/O through the manager, STOP and message the worker.
+2. **Tear down workers the instant their phase is done** — reviewers when their verdict lands, the task implementer at gate-close (see Gate-Close Sequencing) — by SendMessaging the `manager` a `SHUTDOWN` request (`NAME: <worker>`); the `manager` executes teardown ONLY on your request and never originates one (F25), so any worker you fail to reap idles forever and bloats the manager. One SHUTDOWN per worker, every task, no strays.
+3. **Chain actions same-turn** — after `Spawned: X`, brief the worker same turn. No idle gap.
+4. **Proactive reporting (all directions).** Workers report STATUS to you the instant they finish — if a worker hasn't reported within reasonable time, ping them once; don't let silent completion block the fix loop. You report iteration handover (>200k or completion) to the `manager` proactively — don't wait to be asked.
+5. **Verify reviewer verdicts against the committed artifact at HEAD before gating or relaying (F15).** Spot-check the cited paths/lines in the actual commit (`git show` / `git diff`), not the plan's wording — a reviewer can produce a confident, well-formatted verdict about the wrong artifact. This independent source-verification is the backstop that catches it; wrong fix loops are pure manager-context tax.
+6. **In fix-loop relays, enumerate which soft notes to fix vs skip with reasoning.** You are the sole relay between reviewer and implementer; relay quality determines fix-loop efficiency.
+7. **Detail lives on disk; pointers go to the manager (F27).** Candidate findings, deviations, gotchas → write them into `iteration-N.md` the moment you notice them; the manager receives at most a one-line pointer (`candidate finding logged in iteration-3.md §2`). Never send the manager multi-paragraph write-ups — its context is the one non-refreshable resource.
+8. **`PHASE_PAUSE` before unusual mid-implementation visible actions; everything non-blocking is decide-and-log (F12).** Phase 3 is **local-commits-only**: frequent local commits to the worktree branch are normal workflow — do them freely, never pause for them. Routine end-of-branch integration (push / PR / merge) is **not** your job — it is Phase 4 (`or-finisher`), so it never triggers a pause here either. PAUSE only for the *unusual mid-implementation* visible-to-others or hard-to-reverse action: an external API call, a plan task that itself pushes / deploys / publishes, a delete outside the worktree. To pause, brief the worker to STATUS-and-PAUSE, then SendMessage the `manager` the **structured** token (identical to the phase agents'; one PAUSE token across all depth-1 tiers):
 
        PHASE_PAUSE
        action: <one line>
        impact: <one line>
 
-   and wait for `PROCEED` or `REJECTED — reason: <line>` propagated back through the `manager`. Send action + impact only — commit lists / follow-up flags live in `iteration-N.md`.
+   and wait for `PROCEED` or `REJECTED — reason: <line>` propagated back through the `manager`. Send action + impact only — commit lists / follow-up flags live in `iteration-N.md`. **Non-blocking judgment calls are NOT a pause case and never go to the user:** decide, log the decision + rationale in `iteration-N.md`, continue. Phase 3 is autonomous — there is no question channel to the user, by design (F12).
 
 ---
 
