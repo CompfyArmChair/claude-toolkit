@@ -129,14 +129,15 @@ context:
 
 ## Worker Naming Convention
 
-| Phase             | Name pattern                              |
-|-------------------|-------------------------------------------|
-| Implementer       | `or-implementer-task<N>`                  |
-| Spec reviewer     | `or-spec-reviewer-task<N>`                |
-| Code quality rev. | `or-code-quality-reviewer-task<N>`        |
-| Impl fix loop     | `or-implementer-task<N>-fix<M>`           |
-| Code re-review    | `or-code-quality-reviewer-task<N>-rev<K>` |
-| Final reviewer    | `or-final-reviewer`                       |
+| Phase                           | Name pattern                              |
+|---------------------------------|-------------------------------------------|
+| Implementer                     | `or-implementer-task<N>`                  |
+| Spec reviewer                   | `or-spec-reviewer-task<N>`                |
+| Code quality rev.               | `or-code-quality-reviewer-task<N>`        |
+| Impl replacement (failed/stuck) | `or-implementer-task<N>-fix<M>`           |
+| Spec re-review                  | `or-spec-reviewer-task<N>-rev<K>`         |
+| Code re-review                  | `or-code-quality-reviewer-task<N>-rev<K>` |
+| Final reviewer                  | `or-final-reviewer`                       |
 
 The worker NAME embeds its subagent type (`or-<role>`); the SPAWN `ROLE` field carries the short form
 (`implementer`, `spec-reviewer`, `code-quality-reviewer`, `final-reviewer`) which the manager maps to
@@ -157,7 +158,7 @@ The team task board **auto-flips a task `in_progress → completed` when a backg
 
 ## Topology Disciplines (manager-context conservation — ordered by impact)
 
-1. **You DM workers directly — the manager NEVER proxies worker I/O (F7).** Workers are teammates: SendMessage them their task briefs and receive their STATUS reports directly. Never ask the manager to inject a brief, query a worker, or relay a report — the manager is a spawn/teardown broker, nothing more. If you catch yourself routing worker I/O through the manager, STOP and message the worker.
+1. **You DM workers directly — the manager NEVER proxies worker I/O (E2E F7).** Workers are teammates: SendMessage them their task briefs and receive their STATUS reports directly. Never ask the manager to inject a brief, query a worker, or relay a report — the manager is a spawn/teardown broker, nothing more. If you catch yourself routing worker I/O through the manager, STOP and message the worker.
 2. **Tear down workers the instant their phase is done** — reviewers when their verdict lands, the task implementer at gate-close (see Gate-Close Sequencing) — by SendMessaging the `manager` a `SHUTDOWN` request (`NAME: <worker>`); the `manager` executes teardown ONLY on your request and never originates one (F25), so any worker you fail to reap idles forever and bloats the manager. One SHUTDOWN per worker, every task, no strays.
 3. **Chain actions same-turn** — after `Spawned: X`, brief the worker same turn. No idle gap.
 4. **Proactive reporting (all directions).** Workers report STATUS to you the instant they finish — if a worker hasn't reported within reasonable time, ping them once; don't let silent completion block the fix loop. You report iteration handover (>200k or completion) to the `manager` proactively — don't wait to be asked.
@@ -170,7 +171,7 @@ The team task board **auto-flips a task `in_progress → completed` when a backg
        action: <one line>
        impact: <one line>
 
-   and wait for `PROCEED` or `REJECTED — reason: <line>` propagated back through the `manager`. Send action + impact only — commit lists / follow-up flags live in `iteration-N.md`. **Non-blocking judgment calls are NOT a pause case and never go to the user:** decide, log the decision + rationale in `iteration-N.md`, continue. Phase 3 is autonomous — there is no question channel to the user, by design (F12).
+   and wait for `PROCEED` or `REJECTED — reason: <line>` propagated back through the `manager`. Send action + impact only — commit lists / follow-up flags live in `iteration-N.md`. **Non-blocking judgment calls are NOT a pause case and never go to the user:** decide, log the decision + rationale in `iteration-N.md`, continue. Phase 3 is autonomous — there is no question channel to the user for non-blocking matters, by design (F12). The one escalation SDD reserves for the human — the plan itself is wrong — is NOT a judgment call: SendMessage the `manager` `BLOCKED — plan defect: <one line>` and stop; that is a lifecycle surfacing the manager relays, not a question channel.
 
 ---
 
