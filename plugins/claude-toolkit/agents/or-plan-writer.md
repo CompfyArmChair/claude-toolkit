@@ -87,7 +87,8 @@ user has not approved, sending it is a protocol violation.
 
 - ❌ "The skill says to offer the execution choice and ask 'Which approach?' — I should ask the
   user." — The skill doesn't know it runs inside an orchestrator. Execution dispatch is the
-  manager's job; it spawns the Phase-3 supervisor. Send `PLAN_COMPLETE` instead.
+  manager's job; it spawns the Phase-3 supervisor. Run the walkthrough gate (above) if the user has
+  not yet approved, then send `PLAN_COMPLETE` instead.
 - ❌ "I'll invoke `superpowers:subagent-driven-development` (or `superpowers:executing-plans`) to
   start execution." — You have no `Agent` tool and you are not the implementation tier. The manager
   spawns the supervisor; your job ends at the saved, self-reviewed plan.
