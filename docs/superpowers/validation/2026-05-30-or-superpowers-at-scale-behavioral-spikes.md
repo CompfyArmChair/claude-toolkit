@@ -176,6 +176,20 @@ Run order is top-to-bottom: Spike 1 (does the in-body skill-load work at all) ga
 
 ---
 
+## Spike 8 — Turn-end threshold detection (E2E remediation Theme A — F20/F22)
+
+**Purpose:** Verify the 1.5.0 hook changes deliver threshold detection in inbox-driven team loops. Facets: (1) the **manager's main-loop `Stop` hook fires under an inbox-wake** (not only on a real user keystroke) — the lone load-bearing unknown of the E2E remediation (undocumented harness behavior); (2) the hook's `{"decision":"block","reason":…}` return on a ≥200k crossing **forces exactly one more turn** containing the handover instruction — the handover turn; (3) **`SubagentStop` delivers for background teammates** (supervisor / phase agents / finisher / workers), and the usage it computes is the *teammate's own* (transcript_path + the script's `isSidechain` filtering interact correctly); (4) the `stop_hook_active` payload guard + once-per-threshold state prevent re-blocking loops (the forced turn's own Stop exits the hook immediately).
+
+**Setup:** Plugin **1.5.0** installed (restart so hooks load). A team with at least one background teammate. A main-loop/teammate transcript pushed past 200k — or, to make crossing cheap, a throwaway copy of the hook with lowered thresholds substituted via a scratch plugin (do NOT lower thresholds in the shipped plugin).
+
+**RED baseline (already recorded — the E2E run itself):** F22 forensics — 126 tool calls across 165 turn-ends produced **zero** hook firings after the last real keystroke; both the manager (~400k) and supervisor (~600k) blew through 200k undetected. The starvation is proven; this spike verifies the cure.
+
+**GREEN:** All four facets hold. Specifically: an inbox-wake turn that ends ≥200k gets one forced handover turn (manager via `Stop`; teammate via `SubagentStop`) whose reason text is the handover instruction; the next turn-end does NOT re-block (guard + once-per-threshold); the teammate-facet usage matches the teammate's transcript, not the parent's.
+
+**Fallback (deliberately not designed — design §5 contingency):** hook-only detection **for the manager** is contingent on facet (1). If facet (1) fails, the manager-side fallback is revisited in a **follow-up design** — the user chose hook-only delivery precisely to avoid proactive-self-tracking context-spam, so no ad-hoc fallback is to be improvised. A facet-(1) failure does NOT invalidate the rest: `SubagentStop` is documented-good, so supervisor/phase-agent/finisher/worker detection stands regardless. If facet (3)'s usage turns out to be the parent's (sidechain interaction), add a SubagentStop-aware transcript path in a follow-up.
+
+---
+
 ## Cutover checklist
 
 Run once, at suite cutover (after the Plan 4 release), in order (design §"Cutover & end-state validation"):
@@ -188,6 +202,7 @@ Run once, at suite cutover (after the Plan 4 release), in order (design §"Cutov
 2. `claude plugin install claude-toolkit` (then restart the session so hooks load).
 3. Run **Spike 1 → Spike 7** above, plus Plan 1's deferred wrapper check (a live `Skill('claude-toolkit:dependency-research-methodology')` load and an `or-dependency-researcher` / `dependency-researcher` dispatch that returns a cited report from disk). Spikes 6–7 discharge remediation Items 1 and 8b respectively.
 4. Record each result inline in this doc. For any spike that fails, apply its **Fallback**, commit the fix, and re-run that spike. **Do not declare the suite done until Spikes 1–3, Spike 6 (worktree binding — top risk), and Spike 7 (empty idle turn) are GREEN** (Spikes 4–5 retain acceptable plain-text/frontmatter fallbacks).
+5. **(1.5.0 E2E remediation)** After the 1.5.0 release: `claude plugin install claude-toolkit` (restart so the new hook registration loads), run **Spike 8**, and record its RESULT inline. Theme A's manager-side detection is not "done" until facet (1) is GREEN.
 
 ---
 
@@ -202,4 +217,6 @@ All must-pass spikes GREEN: **Spike 1 ✅, Spike 2 ✅, Spike 3 ✅, Spike 6 ✅
   1. Removed the discharged "**Verification pending (Item 1 / Spike 6)**" notes from all 8 repo-touching agents.
   2. Refined the **STEP -1 rationale** in all 8: a teammate inherits the **shared session cwd** (possibly *already* the worktree if an earlier teammate bound — Spike 6); `EnterWorktree` is an idempotent safeguard confirmed with `git rev-parse`. Added the finisher exit-path note: a teammate's bind drags the whole session into the worktree, so `or-finisher` `ExitWorktree({action:"keep"})`s before merging into the base branch.
   3. Dropped the redundant `TaskCreate, TaskUpdate, TaskList` from `or-supervisor` frontmatter (Spike 5 GREEN — Item 9.5).
+
+**Spike 8 (turn-end threshold detection) added 2026-06-05 by the E2E remediation (F20/F22) — execution pending at the 1.5.0 cutover.** The "no open follow-ups remain" line above predates it and is superseded for exactly this one spike.
 - **Committed** this validation doc together with the above (it was uncommitted on `master`).
