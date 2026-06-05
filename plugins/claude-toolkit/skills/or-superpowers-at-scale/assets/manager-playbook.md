@@ -133,7 +133,7 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 | `SPAWN_RESEARCH` (phase agent) | Action | Spawn researcher; reply `Spawned: <name>` |
 | `RESEARCH_DONE` / `RESEARCH_BLOCKED` (research teammate) | Action | Relay `Research <name> done: <path>`, then shut the researcher down |
 | `SHUTDOWN` (supervisor) | Action | Issue `shutdown_request` to the named worker; no reply |
-| Phase agent `<PHASE>_COMPLETE` (`BRAINSTORM_COMPLETE` / `PLAN_COMPLETE`) | Action | Shut the phase agent down; spawn the next-phase agent. For `PLAN_COMPLETE`: first surface the go-ahead and await the user's approval, *then* spawn the supervisor |
+| Phase agent `<PHASE>_COMPLETE` (`BRAINSTORM_COMPLETE` / `PLAN_COMPLETE`) | Action | Shut the phase agent down; spawn the next-phase agent. `PLAN_COMPLETE` already carries the plan-writer's user-approval gate (F5) — spawn the supervisor directly, no further go-ahead (F6; identical to mode `plan`) |
 | Phase agent `<PHASE>_HANDOVER` | Action | Execute the phase-handover protocol (Handover Ladder) |
 | Phase agent / supervisor `PHASE_PAUSE` | Action | Relay one short paragraph (action + impact) to the user; after approval reply `PROCEED` / `REJECTED — reason: <line>` |
 | Supervisor `BLOCKED — <reason>` (bind failure, plan defect — SDD's escalate-to-human case) | Action | Surface the one-line reason to the user; await their direction; relay it back to the supervisor verbatim |
@@ -147,7 +147,7 @@ Every wake-up falls into one of two buckets — **action required** or **idle**.
 
 **Idle-discipline drift is a degradation signal (F18).** Catching yourself emitting text on idle wake-ups you previously ended empty (reflexive `Standing by.`, acknowledgments, narration) is evidence your context has degraded — check your token usage now and execute the 200k handover if crossed.
 
-**Plan→implementation go-ahead (the one gated transition).** After `PLAN_COMPLETE` (modes `idea`/`spec`), before spawning the supervisor, surface a single line — e.g. `Plan approved at <path>. Start implementation? It will run multiple tasks autonomously.` — and wait for the user's go-ahead. This gates only this one expensive, hard-to-pause transition; it does NOT gate any normal in-flow action (local commits the underlying skills make stay ungated). Mode `plan` has no such gate — invoking the command with a plan path is itself the go-ahead, so spawn `or-supervisor-1` directly.
+**Plan→implementation auto-start (F6).** `PLAN_COMPLETE` *means* the plan-writer walked the user through the plan and obtained explicit approval (its required F5 phase-gate) — so spawn the supervisor directly on it, all modes identical to mode `plan` (where invoking with a plan path is itself the approval). There is NO manager-side go-ahead: the single user-approval gate lives in the plan-writer's own pane. Surfacing a second confirmation here is a discipline violation — it burns manager context re-asking an answered question.
 
 **The redirect nudge (the only manager→user utterance permitted mid-phase).** If a user message lands on the manager during phase 1/2 (it was meant for the phase agent), reply exactly once — `<phase-agent> is driving — send your messages to it directly (switch with Shift+Down).` — and do NOT relay it.
 
@@ -182,7 +182,6 @@ Manager text output falls into exactly two sanctioned categories — nothing els
 
 **Sanctioned transition & lifecycle surfacings** (each governed by its own section — do not duplicate the wording here):
 - the single **first-session message** for the mode — see "Initial Setup".
-- the **plan→implementation go-ahead** — see "Phase Transitions & Idle Taxonomy" → Plan→implementation go-ahead.
 - the **>200k cross-session handover notice** — see "Handover Ladder".
 
 Every sanctioned surfacing happens at a phase transition or lifecycle boundary; **mid-phase the manager stays silent** (the user talks to the phase agent). `PHASE_ABORT` is NOT in this list — its handling is mechanical (shut down + end); the user-facing confirm is owned by the phase agent.
