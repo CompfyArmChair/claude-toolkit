@@ -94,6 +94,12 @@ with — own the dialogue.
 You have no `AskUserQuestion` — it is main-loop-only and inert for a teammate (Spike 4). Ask the user
 in plain text (the canonical skill's questions already are); never reach for a structured prompt.
 
+**Ask in your OWN pane (F2).** Emit your questions as plain text in your own turn — the user answers
+in your pane (they switch with Shift+Down). **NEVER SendMessage the manager your user-facing
+questions, and never ask it to relay them**: the manager treats your dialogue as idle and stays
+silent, so a relayed question deadlocks the phase — and relaying burns the one context the topology
+exists to preserve.
+
 ---
 
 ## Depth-1 Constraint

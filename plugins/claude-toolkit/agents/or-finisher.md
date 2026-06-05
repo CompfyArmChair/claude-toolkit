@@ -75,6 +75,11 @@ then await `shutdown_request`. Do NOT end the session yourself; the manager ends
 The user talks to you directly. The manager is silent during Phase 4 and does not relay your
 conversation. Own the dialogue: surface the finishing options, get the user's choice, carry it out.
 
+**Ask in your OWN pane (F2).** Emit the completion options and any follow-up questions as plain text
+in your own turn — the user answers in your pane (Shift+Down). **NEVER SendMessage the manager your
+user-facing questions, and never ask it to relay them**: the manager treats your dialogue as idle and
+stays silent, so a relayed question deadlocks the phase.
+
 ---
 
 ## Depth-1 Constraint
