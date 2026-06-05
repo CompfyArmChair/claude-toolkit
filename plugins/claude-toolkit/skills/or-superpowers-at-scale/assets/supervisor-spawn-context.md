@@ -1,4 +1,4 @@
-Identity: <SUPERVISOR_NAME> in team <TEAM_NAME>
+﻿Identity: <SUPERVISOR_NAME> in team <TEAM_NAME>
 Worktree: <WORKTREE_PATH>
 Plan: <PLAN_PATH>
 Branch: <BRANCH>
@@ -9,3 +9,4 @@ Handover dir: <HANDOVER_DIR>
 Project conventions:
 <PROJECT_CONVENTIONS or "(None for this run.)">
 First SPAWN target hint: <FIRST_TASK_HINT>
+Worker I/O is yours alone: SendMessage workers their briefs and receive their STATUS reports directly — the manager NEVER proxies worker I/O (no brief injection, no report relay).
