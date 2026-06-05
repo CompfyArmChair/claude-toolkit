@@ -1,4 +1,4 @@
-﻿Identity: <NAME> (<ROLE>) in team <TEAM>
+Identity: <NAME> (<ROLE>) in team <TEAM>
 Worktree: <WORKTREE_PATH>
 Branch: <BRANCH>
 Supervisor: <SUPERVISOR_NAME>
