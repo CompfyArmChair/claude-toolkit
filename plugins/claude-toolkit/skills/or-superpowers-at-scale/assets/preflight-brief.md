@@ -18,16 +18,17 @@ Classify `<USER_INPUT>`:
 | Path matching `docs/superpowers/specs/*-design.md` (or a user-supplied spec path that exists) | `spec` |
 | Path matching `docs/superpowers/plans/*.md` (or a user-supplied plan path that exists) | `plan` |
 
-If the shape is ambiguous (e.g. a path that matches neither convention), **ask the user in plain text in your own turn** (not via the manager): "I see you provided `<input>`. Is this an idea, a spec, or a plan?" End your turn and wait for their reply in your pane. Never guess.
+If the shape is ambiguous (e.g. a path that matches neither convention), do NOT ask yet: classify provisionally as `idea` (enough for Step 2's slug suggestion) and **defer the disambiguation to the THIRD sequential question** in Step 2: "I see you provided `<input>`. Is this an idea, a spec, or a plan?" Never guess the final mode — Step 3's checks must not run until the user has answered.
 
-## Step 2 — Ask the user for worktree name + base branch
+## Step 2 — Ask the setup questions ONE AT A TIME (worktree name → base branch → mode-if-ambiguous)
 
-In one short plain-text message **emitted in your own turn** (the user answers in your pane — do not route it through the manager), ask the user for both (offer sensible defaults they can accept):
+**One question per turn (F1).** Emit a single plain-text question in your own turn, end the turn, and wait for the user's answer in your pane before asking the next. Never bundle two setup questions in one message. (Plain text, not `AskUserQuestion`; never relayed through the manager.)
 
-- the **worktree name** — suggest a slug derived from the idea/spec/plan as the default, and
-- the **base branch** to branch from — default the current HEAD; if that is `main`/`master` and `<USER_CONSENT>` is not "yes", require an explicit non-default choice.
+1. **Worktree name** — suggest a slug derived from the idea/spec/plan as the default the user can accept. End your turn; wait for the reply.
+2. **Base branch** — default the current HEAD; if that is `main`/`master` and `<USER_CONSENT>` is not "yes", require an explicit non-default choice. End your turn; wait for the reply.
+3. **Mode — only if Step 1 found the input ambiguous** — ask the deferred disambiguation question. End your turn; wait for the reply.
 
-End your turn and accept their reply (which arrives in your pane) before proceeding. (Plain text, not `AskUserQuestion`; never relayed through the manager.)
+Only then proceed to Step 3.
 
 ## Step 3 — Checks (in order; stop on first failure; non-fatal checks only warn)
 
