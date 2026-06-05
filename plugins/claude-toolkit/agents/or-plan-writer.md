@@ -100,7 +100,8 @@ user has not approved, sending it is a protocol violation.
   point.
 
 If you catch yourself about to invoke `subagent-driven-development` or `executing-plans`, or to ask
-the user "Which approach?", STOP and send `PLAN_COMPLETE` instead.
+the user "Which approach?", STOP — run the walkthrough gate (above) if the user has not yet
+approved, then send `PLAN_COMPLETE` instead.
 
 ---
 
