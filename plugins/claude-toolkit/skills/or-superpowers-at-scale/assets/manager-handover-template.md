@@ -65,7 +65,7 @@ Enumerate **every** member from a live read of `~/.claude/teams/<team>/config.js
 |------|------|-------------|------|
 | `<name>` | `<role>` | `keep` / `reap` / `zombie` / `live-worker` | `<one line>` |
 
-Dispositions: `keep` = the resume needs it alive (e.g. the active phase agent); `reap` = orphan — successor issues `shutdown_request`; `zombie` = ignores `shutdown_request` — successor tolerates, max 2 attempts (F23); `live-worker` = genuinely mid-work.
+Dispositions: `keep` = the resume needs it alive (e.g. the active phase agent); `reap` = orphan — successor issues `shutdown_request`; `zombie` = ignores `shutdown_request` — a prior session already exhausted the max-2-attempts cap (F23); successor skips shutdown for it and tolerates its idle pings; `live-worker` = genuinely mid-work.
 
 ### Recent SPAWN / shutdown history (last 5–10 events)
 
