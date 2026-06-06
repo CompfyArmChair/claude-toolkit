@@ -200,6 +200,53 @@ Method: **real shipped thresholds** (no scratch plugin — higher fidelity than 
 
 ---
 
+## Spike 9 — Teammate-scoped turn-end detection (Spike 8 facet-3 follow-up)
+
+**Purpose:** Verify the 1.5.2 teammate-scoped measurement (design:
+`docs/superpowers/specs/2026-06-06-teammate-scoped-context-checkpoints-design.md`):
+a `SubagentStop` crossing measures the **agent's own** transcript and enforces the
+agent's own handover under a **per-agent** state identity
+(`context-usage-<session_id>--<agent_id>.json`); the manager's pools are untouched
+by teammate events; one-shot subagents stop receiving spurious end-of-run blocks.
+
+**Setup:** Plugin **1.5.2** installed (restart so the updated hook loads). A team
+with at least one background teammate; real shipped thresholds (Spike 8 method:
+bloat context by Reading old-transcript noise; cross-check figures with a helper
+mirroring the hook's own `latest_main_thread_usage()` computation — for teammates,
+read `<project>/<session-id>/subagents/agent-<id>.jsonl` WITHOUT the sidechain
+filter).
+
+**RED baseline (already recorded — Spike 8 facet 3):** a teammate was blocked at
+the MANAGER's figure (parent transcript, parent session_id); shared
+once-per-threshold pools observed live (a teammate's PostToolUse announce consumed
+the parent's `tool` key and suppressed the manager's own mid-turn announce).
+
+**GREEN (all five):**
+
+1. A teammate that bloats its own context past 200k while the manager stays low is
+   blocked with its **own** figure (the reason's `[N tokens used]` matches the
+   teammate's `subagents/agent-<id>.jsonl` usage, not the parent transcript's).
+2. The manager's pools are untouched by the teammate's crossing: the parent state
+   file shows no `subagent_stop` write, and the manager's own subsequent crossing
+   still announces; the teammate's write lands in
+   `context-usage-<session_id>--<agent_id>.json`.
+3. A manager crossing does **not** block teammates (a teammate turn-end after the
+   manager passes 200k stays silent while the teammate is below threshold).
+4. A one-shot subagent completing on a ≥200k session shows **no** spurious
+   end-of-run block.
+5. `stop_hook_active` guard + once-per-threshold hold **per agent**: the forced
+   turn's own SubagentStop does not re-block, and the same agent's next turn-end
+   below the next threshold stays silent.
+
+**Fallback:** If the installed payload carries neither `agent_transcript_path` nor
+`subagent_transcript_path` (field-name drift), the hook skips with a stderr
+breadcrumb (visible under `claude --debug`) — diagnose the actual field name from
+the live payload and extend the alias list in `measurement_target()`. If
+`agent_id` is absent, state falls back to the transcript filename stem — verify
+the composite state filename rather than failing the spike on naming alone.
+
+---
+
 ## Cutover checklist
 
 Run once, at suite cutover (after the Plan 4 release), in order (design §"Cutover & end-state validation"):
@@ -213,6 +260,7 @@ Run once, at suite cutover (after the Plan 4 release), in order (design §"Cutov
 3. Run **Spike 1 → Spike 7** above, plus Plan 1's deferred wrapper check (a live `Skill('claude-toolkit:dependency-research-methodology')` load and an `or-dependency-researcher` / `dependency-researcher` dispatch that returns a cited report from disk). Spikes 6–7 discharge remediation Items 1 and 8b respectively.
 4. Record each result inline in this doc. For any spike that fails, apply its **Fallback**, commit the fix, and re-run that spike. **Do not declare the suite done until Spikes 1–3, Spike 6 (worktree binding — top risk), and Spike 7 (empty idle turn) are GREEN** (Spikes 4–5 retain acceptable plain-text/frontmatter fallbacks).
 5. **(1.5.0 E2E remediation)** After the 1.5.0 release: `claude plugin install claude-toolkit` (restart so the new hook registration loads), run **Spike 8**, and record its RESULT inline. Theme A's manager-side detection is not "done" until facet (1) is GREEN. — **DONE 2026-06-06 against installed 1.5.1: facet (1) GREEN** (see Spike 8 RESULT; facet (3) scoping spawned one named follow-up).
+6. **(1.5.2 teammate scoping)** After the 1.5.2 release: `claude plugin install claude-toolkit` (restart so the updated hook loads), run **Spike 9**, and record its RESULT inline. Spike 8 facet (3)'s scoping defect is not closed until Spike 9 is GREEN.
 
 ---
 
@@ -229,4 +277,4 @@ All must-pass spikes GREEN: **Spike 1 ✅, Spike 2 ✅, Spike 3 ✅, Spike 6 ✅
   3. Dropped the redundant `TaskCreate, TaskUpdate, TaskList` from `or-supervisor` frontmatter (Spike 5 GREEN — Item 9.5).
 - **Committed** this validation doc together with the above (it was uncommitted on `master`).
 
-**Spike 8 (turn-end threshold detection) EXECUTED 2026-06-06 at the 1.5.1 cutover — facets (1)/(2)/(4) ✅ GREEN; facet (3) delivery ✅ / scoping ❌** (see its RESULT block). Theme A's manager-side detection is **done**. Exactly one open follow-up remains, inherited from facet (3): **teammate-scoped SubagentStop measurement** — teammate turn-end events carry the parent's session_id, and teammate transcripts (`<parent-session>/subagents/agent-<id>.jsonl`, all entries `isSidechain: true`) are invisible to the hook's sidechain filter, so teammates are currently blocked on the *manager's* usage, not their own. Fix shape: measure the agent transcript named by the payload without the sidechain filter and key state per agent — a hook-only change, needs its own design pass + spike.
+**Spike 8 (turn-end threshold detection) EXECUTED 2026-06-06 at the 1.5.1 cutover — facets (1)/(2)/(4) ✅ GREEN; facet (3) delivery ✅ / scoping ❌** (see its RESULT block). Theme A's manager-side detection is **done**. Exactly one open follow-up remains, inherited from facet (3): **teammate-scoped SubagentStop measurement** — teammate turn-end events carry the parent's session_id, and teammate transcripts (`<parent-session>/subagents/agent-<id>.jsonl`, all entries `isSidechain: true`) are invisible to the hook's sidechain filter, so teammates are currently blocked on the *manager's* usage, not their own. Fix shape: measure the agent transcript named by the payload without the sidechain filter and key state per agent — a hook-only change — **designed 2026-06-06** (`docs/superpowers/specs/2026-06-06-teammate-scoped-context-checkpoints-design.md`), implemented as **1.5.2** on branch `teammate-scoped-checkpoints`; verification = **Spike 9** above, to run at the 1.5.2 cutover (checklist item 6).
