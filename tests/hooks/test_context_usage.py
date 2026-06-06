@@ -119,7 +119,7 @@ class ContextUsageHookTests(unittest.TestCase):
         out = json.loads(self.run_hook("Stop", 210_000))
         self.assertEqual(out["decision"], "block")
         self.assertIn("200k", out["reason"])
-        self.assertIn("handover", out["reason"].lower())
+        self.assertIn("operating instructions", out["reason"])
 
     def test_subagent_stop_measures_agent_transcript_not_parents(self):
         # The agent transcript (210k, every entry isSidechain) is measured;
@@ -163,6 +163,24 @@ class ContextUsageHookTests(unittest.TestCase):
         out = json.loads(self.run_hook("Stop", 210_000))      # re-arms
         self.assertEqual(out["decision"], "block")
         self.assertIn("200k", out["reason"])
+
+    def test_turn_end_reasons_are_sensor_language_at_every_tier(self):
+        # 1.5.4 de-engineering: the hook is a SENSOR - it reports the figure
+        # and the threshold, then defers to the agent's operating
+        # instructions. Threshold POLICY (the or-* tiers' mandatory-handover
+        # rule, F10) lives in the agent manuals; the hook must not duplicate
+        # it. Escalation walks all three actionable tiers in one session.
+        for tokens, tier in (
+            (210_000, "200k"),
+            (260_000, "250k"),
+            (310_000, "300k"),
+        ):
+            with self.subTest(tier=tier):
+                reason = json.loads(self.run_hook("Stop", tokens))["reason"]
+                self.assertIn(tier, reason)
+                self.assertIn("operating instructions", reason)
+                for policy_word in ("handover", "hand over", "mandatory"):
+                    self.assertNotIn(policy_word, reason.lower())
 
     # --- SubagentStop: teammate-scoped measurement (Spike 8 facet 3) ---
     # The agent's OWN transcript is measured (sidechain filter lifted - agent
@@ -323,6 +341,16 @@ class ContextUsageHookTests(unittest.TestCase):
         ctx = out["hookSpecificOutput"]
         self.assertEqual(ctx["hookEventName"], "UserPromptSubmit")
         self.assertIn("200k", ctx["additionalContext"])
+
+    def test_informational_warnings_are_sensor_language(self):
+        # Same sensor/policy split on the informational path: the >=200k
+        # additionalContext warnings point at the agent's operating
+        # instructions instead of prescribing the handover protocol.
+        out = json.loads(self.run_hook("UserPromptSubmit", 210_000))
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("operating instructions", ctx)
+        for policy_word in ("handover", "hand over", "mandatory"):
+            self.assertNotIn(policy_word, ctx.lower())
 
     def test_tool_event_announces_once(self):
         first = self.run_hook("PostToolUse", 110_000)

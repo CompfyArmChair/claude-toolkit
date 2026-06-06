@@ -9,11 +9,11 @@ announces a checkpoint crossing exactly once per session, per event type:
   PostToolUse      -> informational: injects additionalContext mid-turn,
                       immediately after the next tool call following a
                       crossing - so the assistant can adapt mid-task
-  Stop             -> turn-end: for ACTIONABLE crossings (>= 200k, the
-                      handover threshold) returns {"decision": "block",
-                      "reason": <handover instruction>}, forcing exactly one
-                      more turn - the handover turn. Sub-threshold crossings
-                      never block (never force a turn for information).
+  Stop             -> turn-end: for ACTIONABLE crossings (>= 200k) returns
+                      {"decision": "block", "reason": <context warning>},
+                      forcing exactly one more turn so the warning reaches
+                      the agent. Sub-actionable crossings never block (never
+                      force a turn for information).
   SubagentStop     -> turn-end: same as Stop, but measured on the AGENT's
                       own transcript (payload agent_transcript_path, alias
                       subagent_transcript_path) under a per-agent state
@@ -26,13 +26,20 @@ announces a checkpoint crossing exactly once per session, per event type:
                       the parent's transcript: mis-scoped measurement is
                       the bug this scoping fixes.
 
+Sensor, not policy (de-engineered in 1.5.4): every message reports the
+figure and the threshold, then defers to the agent's own operating
+instructions. What a crossing REQUIRES (e.g. the or-* tiers'
+handover-at-200k rule) is policy and lives in the agent manuals (F10 keeps
+it there); duplicating it in the hook's wording proved to be scope creep.
+
 Why turn-end events (E2E findings F20/F22): in inbox-driven team loops both
 UserPromptSubmit and PostToolUse are starved - teammate-inbox deliveries
-trigger neither - so a tier can blow past its handover threshold with zero
+trigger neither - so an agent can blow past every checkpoint with zero
 announcements. Stop/SubagentStop fire reliably at turn end in those loops,
 but they fire AFTER the assistant's response, so additionalContext has no
 in-progress turn to land in; the block path is the only delivery that works
-there, and it is reserved for actionable crossings.
+there, and it is reserved for actionable crossings. The block is a delivery
+channel, not enforcement.
 
 Loop safety: a blocked turn-end forces one more turn whose own Stop fires
 with stop_hook_active=true - the hook exits immediately on that flag. The
@@ -40,9 +47,9 @@ once-per-threshold state prevents re-announcing the same threshold.
 
 Checkpoints (cumulative tokens):
   100,000  - informational only. Left the 0-100k prime-thinking zone.
-  200,000  - ACTIONABLE: handover threshold crossed.
-  250,000  - ACTIONABLE: 50k past the handover threshold.
-  300,000  - ACTIONABLE: past useful context.
+  200,000  - ACTIONABLE: also delivered via the turn-end block.
+  250,000  - ACTIONABLE: 50k past the 200k checkpoint.
+  300,000  - ACTIONABLE: 100k past the 200k checkpoint.
 
 State files (one JSON per measurement identity):
   main loop:  ~/.claude/hooks/state/context-usage-<session_id>.json
@@ -68,6 +75,16 @@ once-per-threshold keys (possibly suppressing one manager informational
 announce). The authoritative per-agent signal is the turn-end SubagentStop
 block above, which IS agent-scoped.
 
+Accepted residual (per-wake re-warning, Spike 9 2026-06-06): the harness
+assigns every teammate WAKE a fresh agent_id and a fresh wake transcript,
+so per-agent once-per-threshold state never carries across wakes - a
+teammate that wakes still over an actionable threshold is re-warned (one
+forced turn) at every wake until its context shrinks. Under sensor
+semantics that is "one warning per wake while over-threshold" - accepted
+delivery behavior, not a defect. Cross-wake identity engineering (payload
+introspection for a wake-stable key, transcript lineage) was considered
+and rejected as over-engineering.
+
 Malformed input (non-dict state file / stdin payload / transcript entry,
 non-numeric usage field, non-string payload string-field) degrades
 gracefully - fresh state, skipped entry, field counted as 0, or field
@@ -84,60 +101,62 @@ import sys
 from pathlib import Path
 
 # Informational wording (additionalContext on UserPromptSubmit/PostToolUse).
-# The >=200k entries are action-toned: the handover is mandatory the moment
-# the threshold is crossed (manager playbook, F10), so even the informational
-# path must not suggest waiting for a better moment.
+# Sensor language only: report the figure and the threshold, then defer to
+# the agent's own operating instructions. What crossing a threshold REQUIRES
+# (e.g. the or-* tiers' handover-at-200k rule, F10) is policy and lives in
+# the agent manuals - never here.
 CHECKPOINTS = [
     (
         100_000,
-        "Context checkpoint 100k crossed. You've consumed the first 100k - "
-        "your prime thinking real-estate. The next 100k is still high-quality. "
-        "No action needed yet, but be aware.",
+        "Context checkpoint 100k crossed. The first 100k tokens - the "
+        "highest-quality reasoning zone - are consumed.",
     ),
     (
         200_000,
-        "Context checkpoint 200k crossed. You are AT the handover threshold: "
-        "execute your tier's handover protocol now (write your handover/"
-        "iteration doc and emit your handover signal). The handover is "
-        "mandatory - do not wait for a natural stopping point.",
+        "Context checkpoint 200k crossed. Consult your operating "
+        "instructions for how to handle this context warning.",
     ),
     (
         250_000,
-        "Context checkpoint 250k crossed. You are 50k PAST the handover "
-        "threshold and quality is dropping. Stop taking new work and execute "
-        "your handover protocol immediately.",
+        "Context checkpoint 250k crossed - 50k past the 200k checkpoint. "
+        "Consult your operating instructions for how to handle this context "
+        "warning.",
     ),
     (
         300_000,
-        "Context checkpoint 300k crossed. You are far past useful context. "
-        "Hand over NOW - write your handover/iteration doc and stop.",
+        "Context checkpoint 300k crossed - 100k past the 200k checkpoint. "
+        "Consult your operating instructions for how to handle this context "
+        "warning.",
     ),
 ]
 
-# Turn-end wording (decision:block on Stop/SubagentStop). These force the
-# handover turn, so they instruct - never merely inform. 100k is deliberately
-# absent: never force a turn for non-actionable information.
+# Turn-end wording (decision:block on Stop/SubagentStop). The block is a
+# DELIVERY channel, not enforcement: in inbox-driven loops only turn-end
+# events fire reliably (F20/F22), and additionalContext is discarded there,
+# so forcing one extra turn is the only way the warning reaches the agent.
+# The message explains the forced turn mechanically and defers, like every
+# checkpoint, to the agent's operating instructions. 100k is deliberately
+# absent: never force a turn for a sub-actionable checkpoint.
 ACTIONABLE_CHECKPOINTS = [
     (
         200_000,
-        "Context checkpoint 200k crossed (turn-end detection). You are at "
-        "your handover threshold. This extra turn exists so you can hand "
-        "over: before taking ANY new work, execute your tier's handover "
-        "protocol now - write your handover/iteration doc and emit your "
-        "handover signal per your operating manual. If you have no handover "
-        "protocol, wrap up and recommend a fresh session.",
+        "Context checkpoint 200k crossed (turn-end detection). This turn "
+        "was forced so the warning could reach you. Consult your operating "
+        "instructions for how to handle this context warning.",
     ),
     (
         250_000,
-        "Context checkpoint 250k crossed (turn-end detection). You are 50k "
-        "past your handover threshold and quality is dropping. STOP taking "
-        "new work and execute your handover protocol immediately.",
+        "Context checkpoint 250k crossed (turn-end detection) - 50k past "
+        "the 200k checkpoint. This turn was forced so the warning could "
+        "reach you. Consult your operating instructions for how to handle "
+        "this context warning.",
     ),
     (
         300_000,
-        "Context checkpoint 300k crossed (turn-end detection). You are far "
-        "past useful context. Hand over NOW - write your handover/iteration "
-        "doc and stop.",
+        "Context checkpoint 300k crossed (turn-end detection) - 100k past "
+        "the 200k checkpoint. This turn was forced so the warning could "
+        "reach you. Consult your operating instructions for how to handle "
+        "this context warning.",
     ),
 ]
 
