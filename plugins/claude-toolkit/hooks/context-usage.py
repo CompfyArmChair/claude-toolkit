@@ -14,8 +14,17 @@ announces a checkpoint crossing exactly once per session, per event type:
                       "reason": <handover instruction>}, forcing exactly one
                       more turn - the handover turn. Sub-threshold crossings
                       never block (never force a turn for information).
-  SubagentStop     -> turn-end: same as Stop, for subagent / background-
-                      teammate sessions.
+  SubagentStop     -> turn-end: same as Stop, but measured on the AGENT's
+                      own transcript (payload agent_transcript_path, alias
+                      subagent_transcript_path) under a per-agent state
+                      identity <session_id>--<agent_id>, so a teammate is
+                      blocked on ITS OWN crossing, never the manager's
+                      (Spike 8 facet 3). Agent transcripts are entirely
+                      isSidechain:true, so the sidechain filter is lifted
+                      there. A payload naming no agent transcript is
+                      skipped (stderr breadcrumb) - never measured against
+                      the parent's transcript: mis-scoped measurement is
+                      the bug this scoping fixes.
 
 Why turn-end events (E2E findings F20/F22): in inbox-driven team loops both
 UserPromptSubmit and PostToolUse are starved - teammate-inbox deliveries
@@ -35,15 +44,29 @@ Checkpoints (cumulative tokens):
   250,000  - ACTIONABLE: 50k past the handover threshold.
   300,000  - ACTIONABLE: past useful context.
 
-State file (one JSON per session_id):
-  ~/.claude/hooks/state/context-usage-<session_id>.json
+State files (one JSON per measurement identity):
+  main loop:  ~/.claude/hooks/state/context-usage-<session_id>.json
+  per agent:  ~/.claude/hooks/state/
+              context-usage-<session_id>--<agent_id>.json
   Shape: {"prompt": <t>, "tool": <t>, "stop": <t>, "subagent_stop": <t>}
+  (an agent file only ever accrues "subagent_stop" in practice). Files
+  appear only on a first actionable crossing, so accumulation is bounded
+  to agents that actually cross.
   Legacy field "last_announced" migrates to "prompt" on first read.
 
 Reset: if current usage falls below 50% of any previously announced threshold
 (e.g. after /compact or /rewind), all tracked thresholds reset - and the
 reset is persisted immediately, so turn-end detection (which announces
 nothing below 200k that could piggyback persistence) re-arms too.
+
+Accepted residual (teammate-scoped design, 2026-06-06): teammate-originated
+PostToolUse - and user prompts typed in a teammate's pane (UserPromptSubmit)
+- carry no agent identifier (binary-verified), so the informational paths
+remain parent-scoped: a teammate may see mid-turn announces describing the
+MANAGER's context, and such a crossing consumes the parent's prompt/tool
+once-per-threshold keys (possibly suppressing one manager informational
+announce). The authoritative per-agent signal is the turn-end SubagentStop
+block above, which IS agent-scoped.
 
 Malformed input (non-dict state file / stdin payload / transcript entry,
 non-numeric usage field) degrades gracefully - fresh state, skipped entry,
