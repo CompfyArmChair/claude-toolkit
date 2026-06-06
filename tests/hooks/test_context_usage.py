@@ -29,8 +29,10 @@ class ContextUsageHookTests(unittest.TestCase):
         self.addCleanup(self._remove_state)
 
     def _remove_state(self):
-        state_file = STATE_DIR / f"context-usage-{self.session_id}.json"
-        if state_file.exists():
+        # Glob: agent-scoped tests create context-usage-<session>--<agent>.json
+        # siblings alongside the session file. session_id is a per-test UUID,
+        # so the glob can only match this test's files.
+        for state_file in STATE_DIR.glob(f"context-usage-{self.session_id}*.json"):
             state_file.unlink()
 
     def _transcript(self, tokens):
@@ -46,6 +48,26 @@ class ContextUsageHookTests(unittest.TestCase):
             },
         }
         path = self.tmp_dir / "transcript.jsonl"
+        path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+        return path
+
+    def _agent_transcript(self, tokens, agent_id):
+        """A teammate/one-shot agent transcript: every entry isSidechain
+        (the verified on-disk shape of <session>/subagents/agent-<id>.jsonl)."""
+        entry = {
+            "type": "assistant",
+            "isSidechain": True,
+            "agentId": agent_id,
+            "message": {
+                "usage": {
+                    "input_tokens": tokens,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 0,
+                }
+            },
+        }
+        path = self.tmp_dir / f"agent-{agent_id}.jsonl"
         path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
         return path
 
@@ -99,10 +121,17 @@ class ContextUsageHookTests(unittest.TestCase):
         self.assertIn("200k", out["reason"])
         self.assertIn("handover", out["reason"].lower())
 
-    def test_subagent_stop_blocks_at_200k(self):
-        out = json.loads(self.run_hook("SubagentStop", 210_000))
+    def test_subagent_stop_measures_agent_transcript_not_parents(self):
+        # The agent transcript (210k, every entry isSidechain) is measured;
+        # the parent transcript (50k) is not. 1.5.1 had this inverted.
+        agent_t = self._agent_transcript(210_000, agent_id="aaa111")
+        out = json.loads(self.run_hook(
+            "SubagentStop", 50_000,
+            agent_id="aaa111", agent_transcript_path=str(agent_t),
+        ))
         self.assertEqual(out["decision"], "block")
         self.assertIn("200k", out["reason"])
+        self.assertIn("[210,000 tokens used]", out["reason"])
 
     def test_stop_below_actionable_threshold_stays_silent(self):
         # 150k crosses the informational 100k checkpoint, but turn-end events
@@ -135,6 +164,140 @@ class ContextUsageHookTests(unittest.TestCase):
         self.assertEqual(out["decision"], "block")
         self.assertIn("200k", out["reason"])
 
+    # --- SubagentStop: teammate-scoped measurement (Spike 8 facet 3) ---
+    # The agent's OWN transcript is measured (sidechain filter lifted - agent
+    # transcripts are wholly isSidechain:true) under a per-agent state
+    # identity <session_id>--<agent_id>. Never fall back to the parent's
+    # transcript_path: mis-scoped measurement IS the 1.5.1 bug.
+
+    def test_subagent_transcript_path_alias_accepted(self):
+        # Docs name the field subagent_transcript_path; the installed binary
+        # says agent_transcript_path. Either must work (naming drift is real).
+        agent_t = self._agent_transcript(210_000, agent_id="aaa111")
+        out = json.loads(self.run_hook(
+            "SubagentStop", 50_000,
+            agent_id="aaa111", subagent_transcript_path=str(agent_t),
+        ))
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("200k", out["reason"])
+
+    def test_subagent_stop_without_agent_transcript_skips_with_breadcrumb(self):
+        # No agent-transcript field (future payload rename): skip + stderr
+        # breadcrumb, exit 0, no output, parent state untouched. The parent
+        # transcript is past 200k, so a parent fallback would block here.
+        proc = self.run_hook_proc(
+            self._payload("SubagentStop", self._transcript(210_000))
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "")
+        self.assertIn("agent_transcript_path", proc.stderr)
+        parent_state = STATE_DIR / f"context-usage-{self.session_id}.json"
+        self.assertFalse(parent_state.exists())
+
+    def test_agent_crossing_writes_only_agent_scoped_state(self):
+        # Spike-8 collision regression: the teammate's crossing must land in
+        # the agent's own state file, leaving the manager's pools untouched.
+        agent_t = self._agent_transcript(210_000, agent_id="aaa111")
+        self.run_hook(
+            "SubagentStop", 50_000,
+            agent_id="aaa111", agent_transcript_path=str(agent_t),
+        )
+        parent_state = STATE_DIR / f"context-usage-{self.session_id}.json"
+        agent_state = (
+            STATE_DIR / f"context-usage-{self.session_id}--aaa111.json"
+        )
+        self.assertFalse(parent_state.exists())
+        self.assertTrue(agent_state.exists())
+        # The manager's own subsequent crossing still announces.
+        out = json.loads(self.run_hook("Stop", 210_000))
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("200k", out["reason"])
+
+    def test_two_agents_cross_independently(self):
+        # 1.5.1 pooled all agents in the parent's subagent_stop key: the
+        # second agent's own 200k crossing would have been suppressed.
+        a = self._agent_transcript(210_000, agent_id="aaa111")
+        out_a = json.loads(self.run_hook(
+            "SubagentStop", 50_000,
+            agent_id="aaa111", agent_transcript_path=str(a),
+        ))
+        self.assertEqual(out_a["decision"], "block")
+        b = self._agent_transcript(205_000, agent_id="bbb222")
+        out_b = json.loads(self.run_hook(
+            "SubagentStop", 50_000,
+            agent_id="bbb222", agent_transcript_path=str(b),
+        ))
+        self.assertEqual(out_b["decision"], "block")
+        self.assertIn("200k", out_b["reason"])
+
+    def test_agent_id_falls_back_to_transcript_stem(self):
+        # No agent_id in the payload: the transcript filename stem keys the
+        # state, so per-agent pooling survives the field's absence.
+        agent_t = self._agent_transcript(210_000, agent_id="ccc333")
+        out = json.loads(self.run_hook(
+            "SubagentStop", 50_000,
+            agent_transcript_path=str(agent_t),
+        ))
+        self.assertEqual(out["decision"], "block")
+        stem_state = STATE_DIR / (
+            f"context-usage-{self.session_id}--agent-ccc333.json"
+        )
+        self.assertTrue(stem_state.exists())
+
+    def test_stop_hook_active_guard_on_subagent_stop(self):
+        # Regression pin (green before AND after): the forced handover turn's
+        # own SubagentStop must not re-block.
+        agent_t = self._agent_transcript(210_000, agent_id="aaa111")
+        self.assertEqual(
+            self.run_hook(
+                "SubagentStop", 50_000,
+                agent_id="aaa111", agent_transcript_path=str(agent_t),
+                stop_hook_active=True,
+            ),
+            "",
+        )
+
+    def test_reset_rearms_agent_pool_after_agent_compaction(self):
+        # A compaction-scale drop inside the agent's OWN state file resets
+        # and re-arms that agent's pool.
+        def fire(tokens):
+            agent_t = self._agent_transcript(tokens, agent_id="aaa111")
+            return self.run_hook(
+                "SubagentStop", 50_000,
+                agent_id="aaa111", agent_transcript_path=str(agent_t),
+            )
+
+        out = json.loads(fire(310_000))             # announce 300k
+        self.assertIn("300k", out["reason"])
+        self.assertEqual(fire(120_000), "")         # <50% -> reset, silent
+        out = json.loads(fire(210_000))             # re-armed
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("200k", out["reason"])
+
+    def test_missing_agent_transcript_file_skips_silently(self):
+        # Dead agent path + parent past 200k: still no parent fallback.
+        self.assertEqual(
+            self.run_hook(
+                "SubagentStop", 210_000,
+                agent_id="aaa111",
+                agent_transcript_path=str(self.tmp_dir / "agent-gone.jsonl"),
+            ),
+            "",
+        )
+
+    def test_low_agent_usage_stays_silent_despite_high_parent_usage(self):
+        # One-shot subagent completing on a >=200k session: 1.5.1 measured
+        # the parent and emitted a spurious end-of-run block. Agent-scoped
+        # measurement is silent.
+        agent_t = self._agent_transcript(50_000, agent_id="aaa111")
+        self.assertEqual(
+            self.run_hook(
+                "SubagentStop", 210_000,
+                agent_id="aaa111", agent_transcript_path=str(agent_t),
+            ),
+            "",
+        )
+
     # --- informational path (UserPromptSubmit / PostToolUse): unchanged ---
 
     def test_prompt_event_emits_additional_context_not_block(self):
@@ -148,6 +311,29 @@ class ContextUsageHookTests(unittest.TestCase):
         first = self.run_hook("PostToolUse", 110_000)
         self.assertIn("100k", first)
         self.assertEqual(self.run_hook("PostToolUse", 120_000), "")
+
+    def test_main_transcript_still_excludes_sidechain_entries(self):
+        # Regression pin (green before AND after): lifting the sidechain
+        # filter applies ONLY to agent transcripts. A sidechain entry in a
+        # MAIN transcript stays invisible (historical inline-sidechain
+        # format). Order matters: the sidechain entry is LAST, so an
+        # unfiltered read would see 500k and block.
+        transcript = self._transcript_lines(
+            self._usage_entry({
+                "input_tokens": 150_000,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "output_tokens": 0,
+            }),
+            json.dumps({
+                "type": "assistant",
+                "isSidechain": True,
+                "message": {"usage": {"input_tokens": 500_000}},
+            }),
+        )
+        proc = self.run_hook_proc(self._payload("Stop", transcript))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "")
 
     # --- malformed-input hardening: graceful recovery, exit 0, one stderr
     # --- breadcrumb naming what was malformed (visible under claude --debug)

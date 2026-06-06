@@ -171,14 +171,14 @@ def total_tokens(usage: dict) -> int:
     return int(total)
 
 
-def state_path(session_id: str) -> Path:
-    safe = SAFE_ID.sub("_", session_id)[:128] or "default"
+def state_path(state_id: str) -> Path:
+    safe = SAFE_ID.sub("_", state_id)[:128] or "default"
     return STATE_DIR / f"context-usage-{safe}.json"
 
 
-def load_state(session_id: str) -> dict:
+def load_state(state_id: str) -> dict:
     try:
-        data = json.loads(state_path(session_id).read_text(encoding="utf-8"))
+        data = json.loads(state_path(state_id).read_text(encoding="utf-8"))
     except Exception:
         return {k: 0 for k in STATE_KEYS}
     if not isinstance(data, dict):
@@ -194,11 +194,11 @@ def load_state(session_id: str) -> dict:
     return data
 
 
-def save_state(session_id: str, state: dict) -> None:
+def save_state(state_id: str, state: dict) -> None:
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         out = {k: int(state.get(k, 0)) for k in STATE_KEYS}
-        state_path(session_id).write_text(json.dumps(out), encoding="utf-8")
+        state_path(state_id).write_text(json.dumps(out), encoding="utf-8")
     except Exception:
         pass
 
@@ -212,7 +212,54 @@ def emit_for(event_name: str, message: str) -> str:
     })
 
 
-def latest_main_thread_usage(transcript: Path) -> dict | None:
+def measurement_target(payload: dict) -> tuple[str, str, bool] | None:
+    """Resolve whose context this event measures: (transcript path, state
+    identity, include_sidechain).
+
+    Main-loop events (UserPromptSubmit/PostToolUse/Stop) measure the
+    session's main transcript under the session_id, excluding sidechain
+    entries (guards against the historical inline-sidechain format).
+
+    SubagentStop measures the AGENT's own transcript under a per-agent
+    identity (Spike 8 facet 3: the payload's transcript_path is the
+    PARENT's, and the parent session_id would pool every agent's
+    once-per-threshold state together). Agent transcripts are entirely
+    isSidechain:true, so sidechain entries count there. The installed
+    binary names the field agent_transcript_path; the docs say
+    subagent_transcript_path - accept both, binary's name first.
+
+    Returns None when no measurable transcript is named. A SubagentStop
+    payload without an agent-transcript field is skipped with a stderr
+    breadcrumb - NEVER measured against the parent's transcript_path,
+    because mis-scoped measurement is the very bug this resolution fixes.
+    """
+    session_id = payload.get("session_id") or "default"
+    event_name = payload.get("hook_event_name") or EVENT_PROMPT
+    if event_name != EVENT_SUBAGENT_STOP:
+        transcript_path = payload.get("transcript_path")
+        if not transcript_path:
+            return None
+        return transcript_path, session_id, False
+    transcript_path = payload.get("agent_transcript_path") or payload.get(
+        "subagent_transcript_path"
+    )
+    if not transcript_path:
+        warn(
+            "SubagentStop payload missing agent_transcript_path/"
+            "subagent_transcript_path - skipping (cannot measure the "
+            "agent's own context)"
+        )
+        return None
+    agent_id = payload.get("agent_id") or Path(transcript_path).stem
+    return transcript_path, f"{session_id}--{agent_id}", True
+
+
+def latest_main_thread_usage(
+    transcript: Path, include_sidechain: bool = False
+) -> dict | None:
+    """Latest assistant usage dict in the transcript. Sidechain entries are
+    skipped unless include_sidechain (agent transcripts are wholly
+    sidechain-flagged, so the filter would blind the read there)."""
     latest = None
     malformed = 0
     try:
@@ -227,7 +274,7 @@ def latest_main_thread_usage(transcript: Path) -> dict | None:
                     continue
                 if entry.get("type") != "assistant":
                     continue
-                if entry.get("isSidechain"):
+                if not include_sidechain and entry.get("isSidechain"):
                     continue
                 msg = entry.get("message")
                 if not isinstance(msg, dict):
@@ -274,20 +321,20 @@ def main() -> int:
     if turn_end and payload.get("stop_hook_active"):
         return 0
 
-    session_id = payload.get("session_id") or "default"
-    transcript_path = payload.get("transcript_path")
-    if not transcript_path:
+    target = measurement_target(payload)
+    if target is None:
         return 0
+    transcript_path, state_id, include_sidechain = target
     p = Path(transcript_path)
     if not p.exists():
         return 0
 
-    usage = latest_main_thread_usage(p)
+    usage = latest_main_thread_usage(p, include_sidechain=include_sidechain)
     if not usage:
         return 0
 
     current = total_tokens(usage)
-    state = load_state(session_id)
+    state = load_state(state_id)
 
     # Reset on significant backwards jump (compact, rewind, fresh transcript).
     # Persist immediately: the turn-end path announces nothing below 200k, so
@@ -296,7 +343,7 @@ def main() -> int:
     if max_tracked > 0 and current < max_tracked * RESET_RATIO:
         for k in STATE_KEYS:
             state[k] = 0
-        save_state(session_id, state)
+        save_state(state_id, state)
 
     key = EVENT_STATE_KEYS.get(event_name, STATE_KEY_PROMPT)
     checkpoints = ACTIONABLE_CHECKPOINTS if turn_end else CHECKPOINTS
@@ -306,7 +353,7 @@ def main() -> int:
     threshold, message = crossing
 
     state[key] = threshold
-    save_state(session_id, state)
+    save_state(state_id, state)
 
     full_msg = f"[{current:,} tokens used] {message}"
     if turn_end:
