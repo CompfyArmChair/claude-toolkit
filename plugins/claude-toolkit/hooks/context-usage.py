@@ -69,8 +69,9 @@ announce). The authoritative per-agent signal is the turn-end SubagentStop
 block above, which IS agent-scoped.
 
 Malformed input (non-dict state file / stdin payload / transcript entry,
-non-numeric usage field) degrades gracefully - fresh state, skipped entry,
-or field counted as 0 - with a one-line stderr breadcrumb naming what was
+non-numeric usage field, non-string payload string-field) degrades
+gracefully - fresh state, skipped entry, field counted as 0, or field
+treated as absent - with a one-line stderr breadcrumb naming what was
 malformed (visible under claude --debug; exit code stays 0). The breadcrumb
 exists because the likeliest trigger is transcript-format drift in a future
 Claude Code release, whose natural symptom - checkpoints silently never
@@ -175,6 +176,18 @@ def warn(message: str) -> None:
     print(f"context-usage: {message}", file=sys.stderr)
 
 
+def str_field(payload: dict, field: str) -> str | None:
+    """A payload field that must be a string to be usable (transcript paths
+    feed Path(), session_id feeds the state filename, hook_event_name keys
+    EVENT_STATE_KEYS). A non-string value is malformed input: warned and
+    treated as absent, like every other malformed-input path."""
+    value = payload.get(field)
+    if value is None or isinstance(value, str):
+        return value or None
+    warn(f"non-string payload field {field!r} treated as absent")
+    return None
+
+
 def total_tokens(usage: dict) -> int:
     total = 0
     non_numeric = []
@@ -235,9 +248,10 @@ def emit_for(event_name: str, message: str) -> str:
     })
 
 
-def measurement_target(payload: dict) -> tuple[str, str, bool] | None:
+def measurement_target(payload: dict, event_name: str) -> tuple[str, str, bool] | None:
     """Resolve whose context this event measures: (transcript path, state
-    identity, include_sidechain).
+    identity, include_sidechain). Payload fields are read via str_field:
+    a non-string value is malformed input, warned and treated as absent.
 
     Main-loop events (UserPromptSubmit/PostToolUse/Stop) measure the
     session's main transcript under the session_id, excluding sidechain
@@ -256,15 +270,14 @@ def measurement_target(payload: dict) -> tuple[str, str, bool] | None:
     breadcrumb - NEVER measured against the parent's transcript_path,
     because mis-scoped measurement is the very bug this resolution fixes.
     """
-    session_id = payload.get("session_id") or "default"
-    event_name = payload.get("hook_event_name") or EVENT_PROMPT
+    session_id = str_field(payload, "session_id") or "default"
     if event_name != EVENT_SUBAGENT_STOP:
-        transcript_path = payload.get("transcript_path")
+        transcript_path = str_field(payload, "transcript_path")
         if not transcript_path:
             return None
         return transcript_path, session_id, False
-    transcript_path = payload.get("agent_transcript_path") or payload.get(
-        "subagent_transcript_path"
+    transcript_path = str_field(payload, "agent_transcript_path") or str_field(
+        payload, "subagent_transcript_path"
     )
     if not transcript_path:
         warn(
@@ -273,7 +286,7 @@ def measurement_target(payload: dict) -> tuple[str, str, bool] | None:
             "agent's own context)"
         )
         return None
-    agent_id = payload.get("agent_id") or Path(transcript_path).stem
+    agent_id = str_field(payload, "agent_id") or Path(transcript_path).stem
     return transcript_path, f"{session_id}--{agent_id}", True
 
 
@@ -335,7 +348,7 @@ def main() -> int:
         warn("malformed stdin payload (not a JSON object) - ignoring event")
         return 0
 
-    event_name = payload.get("hook_event_name") or EVENT_PROMPT
+    event_name = str_field(payload, "hook_event_name") or EVENT_PROMPT
     turn_end = event_name in TURN_END_EVENTS
 
     # Loop guard: a blocked turn-end forced one extra turn; that turn's own
@@ -344,7 +357,7 @@ def main() -> int:
     if turn_end and payload.get("stop_hook_active"):
         return 0
 
-    target = measurement_target(payload)
+    target = measurement_target(payload, event_name)
     if target is None:
         return 0
     transcript_path, state_id, include_sidechain = target

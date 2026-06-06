@@ -181,6 +181,23 @@ class ContextUsageHookTests(unittest.TestCase):
         self.assertEqual(out["decision"], "block")
         self.assertIn("200k", out["reason"])
 
+    def test_agent_transcript_path_wins_over_alias(self):
+        # Regression pin (green before AND after): when BOTH fields are
+        # present, the installed binary's name (agent_transcript_path) beats
+        # the docs' alias - measurement_target() reads it first. The primary
+        # is past 200k and the alias below every threshold, so a block
+        # proves the primary was measured.
+        primary = self._agent_transcript(210_000, agent_id="aaa111")
+        alias = self._agent_transcript(50_000, agent_id="bbb222")
+        out = json.loads(self.run_hook(
+            "SubagentStop", 50_000,
+            agent_id="aaa111",
+            agent_transcript_path=str(primary),
+            subagent_transcript_path=str(alias),
+        ))
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("[210,000 tokens used]", out["reason"])
+
     def test_subagent_stop_without_agent_transcript_skips_with_breadcrumb(self):
         # No agent-transcript field (future payload rename): skip + stderr
         # breadcrumb, exit 0, no output, parent state untouched. The parent
@@ -383,6 +400,83 @@ class ContextUsageHookTests(unittest.TestCase):
         self.assertEqual(out["decision"], "block")
         self.assertIn("200k", out["reason"])
         self.assertIn("transcript", proc.stderr)
+
+    # Non-string payload string-fields (transcript paths, session_id,
+    # hook_event_name, agent_id) must degrade per the same contract - the
+    # naive read raises TypeError (Path(123), re.sub on an int session_id,
+    # dict lookup on an unhashable event name) and breaks the exit-0 promise.
+
+    def test_non_string_transcript_path_ignored_with_warning(self):
+        proc = self.run_hook_proc(json.dumps({
+            "hook_event_name": "Stop",
+            "session_id": self.session_id,
+            "transcript_path": 12345,
+        }))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "")
+        self.assertIn("transcript_path", proc.stderr)
+
+    def test_non_string_agent_transcript_field_skips_with_breadcrumb(self):
+        # Parent transcript past 200k: degrading must still not fall back to
+        # measuring the parent (same rule as the missing-field test above).
+        proc = self.run_hook_proc(json.dumps({
+            "hook_event_name": "SubagentStop",
+            "session_id": self.session_id,
+            "transcript_path": str(self._transcript(210_000)),
+            "agent_id": "aaa111",
+            "agent_transcript_path": {"path": "agent-aaa111.jsonl"},
+        }))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "")
+        self.assertIn("agent_transcript_path", proc.stderr)
+
+    def test_non_string_session_id_falls_back_with_warning(self):
+        # Below threshold: the pin is exit 0 + breadcrumb (no crash), not
+        # output. The state identity degrades to "default" (absent-field
+        # rule), which only malformed payloads ever use.
+        proc = self.run_hook_proc(json.dumps({
+            "hook_event_name": "Stop",
+            "session_id": 42,
+            "transcript_path": str(self._transcript(50_000)),
+        }))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "")
+        self.assertIn("session_id", proc.stderr)
+
+    def test_non_string_event_name_treated_as_prompt_event(self):
+        # An unhashable event name ({"x": 1}) must not crash the state-key
+        # lookup; the event degrades to the default (UserPromptSubmit).
+        proc = self.run_hook_proc(json.dumps({
+            "hook_event_name": {"x": 1},
+            "session_id": self.session_id,
+            "transcript_path": str(self._transcript(210_000)),
+        }))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        out = json.loads(proc.stdout.strip())
+        self.assertEqual(
+            out["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit"
+        )
+        self.assertIn("hook_event_name", proc.stderr)
+
+    def test_non_string_agent_id_falls_back_to_transcript_stem(self):
+        # A non-string agent_id is malformed input - treated as absent, so
+        # the transcript stem keys the state (not a stringified garbage id).
+        agent_t = self._agent_transcript(210_000, agent_id="ccc333")
+        proc = self.run_hook_proc(json.dumps({
+            "hook_event_name": "SubagentStop",
+            "session_id": self.session_id,
+            "transcript_path": str(self._transcript(50_000)),
+            "agent_id": 7,
+            "agent_transcript_path": str(agent_t),
+        }))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        out = json.loads(proc.stdout.strip())
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("agent_id", proc.stderr)
+        stem_state = STATE_DIR / (
+            f"context-usage-{self.session_id}--agent-ccc333.json"
+        )
+        self.assertTrue(stem_state.exists())
 
     def test_non_dict_message_field_skipped_not_poisoning_scan(self):
         transcript = self._transcript_lines(
