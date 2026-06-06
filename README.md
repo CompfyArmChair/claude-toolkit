@@ -36,7 +36,7 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 - **community-research-methodology** — Shared community/real-world research workflow (used by the community researchers)
 
 ### Hooks
-- **context-usage** — Context-window checkpoint hook (`UserPromptSubmit` + `PostToolUse`): announces once per session, per event, when main-thread token usage crosses 100k / 200k / 250k / 300k — a nudge to trim output, lean on subagents, or hand over before quality drops. Per-session state lives under `~/.claude/hooks/state/`.
+- **context-usage** — Context-window checkpoint hook (`UserPromptSubmit`, `PostToolUse`, `Stop`, `SubagentStop`): announces once per measurement identity, per event, when token usage crosses 100k / 200k / 250k / 300k. The informational events inject a nudge to trim output, lean on subagents, or hand over; the turn-end events deliver actionable (≥200k) crossings as `decision:block`, forcing one extra turn so the handover can run — even in inbox-driven team loops where the informational events starve. `SubagentStop` measures the subagent's own transcript under per-agent state, so teammates hand over on their own context, not the parent session's. Per-identity state lives under `~/.claude/hooks/state/`.
 
 ## Install
 
