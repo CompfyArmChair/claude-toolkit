@@ -55,3 +55,12 @@ so never skip it as "already pre-seeded." Follow it verbatim — write the faili
 fail, write the minimal code to pass, refactor. Commit locally as you go; frequent local commits to the
 worktree branch are normal workflow. Pushing and other visible-to-others actions are the supervisor's
 call, not yours.
+
+## Context Warning (≥200k)
+
+A context warning naming your own token figure (the bundled checkpoint hook, usually one forced
+extra turn at turn end) means your context is ending. Do not start new work: bring the current TDD
+step to a safe stopping point (commit anything green), then SendMessage your supervisor
+`BLOCKED — context exhausted at <figure>; done: <one line>; remaining: <one line>` and await
+`shutdown_request`. That STATUS report is your whole handover — workers write no handover docs;
+your supervisor decides whether a fresh implementer takes the remainder.

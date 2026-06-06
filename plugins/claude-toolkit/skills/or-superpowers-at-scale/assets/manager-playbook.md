@@ -226,7 +226,8 @@ All trace back to the Core Principle. Hard requirements, not suggestions.
 | Supervisor | 200k | `iteration-N.md` | `ITERATION <N> — STOPPED_FOR_HANDOVER` / `COMPLETED` |
 | Phase agent | **150k** | `brainstormer-handover-N.md` / `plan-writer-handover-N.md` | `BRAINSTORMER_HANDOVER` / `PLAN_WRITER_HANDOVER` |
 | Finisher | 150k (rare) | (none — successor re-runs `finishing-a-development-branch`) | `FINISHER_HANDOVER` |
-| Research teammate | N/A (one-shot) | — | — |
+| Worker (implementer / reviewers) | 200k (abort, not handover) | (none — the STATUS report to the supervisor IS the handover) | `BLOCKED — context exhausted at <figure>` |
+| Research teammate | 200k (abort; one-shot) | (none — deposits partial findings to the DEPOSIT path) | `RESEARCH_BLOCKED: <path> — context exhausted` |
 
 Templates are bundled at `assets/{iteration,manager,brainstormer,plan-writer}-handover-template.md`; the supervisor and phase agents reach them by invoking this skill. Phase agents handover at 150k (below the supervisor's 200k) so interactive dialogue stays above any compression risk; their handover doc is intentionally <5KB.
 

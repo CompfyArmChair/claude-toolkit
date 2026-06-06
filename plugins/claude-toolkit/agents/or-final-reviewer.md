@@ -47,3 +47,12 @@ per-task reviewers, you run ONCE per branch after the plan's tasks have landed �
 identity. **The holistic review criteria arrive in your supervisor's brief** (built from SDD's
 final-reviewer prompt template) — judge by the brief; this body is orchestration-only and
 deliberately restates none of the methodology.
+
+## Context Warning (≥200k)
+
+A context warning naming your own token figure (the bundled checkpoint hook, usually one forced
+extra turn at turn end) means your context is ending. Do not open new review fronts: emit your
+verdict now from the evidence already gathered, stating explicitly which parts of the brief you
+covered and which you did not — or `BLOCKED — context exhausted at <figure>` if you cannot stand
+behind any verdict. Then await `shutdown_request`; your supervisor decides whether a fresh reviewer
+covers the remainder.

@@ -16,7 +16,7 @@ Use `Skill('claude-toolkit:community-research-methodology')` to load the researc
 
 ## Deposit
 
-Use `Skill('claude-toolkit:research-deposit')` to deliver your findings and signal completion. You will receive a `DEPOSIT: <path>` parameter — write your **full findings** there with the `Write` tool (the complete report, not a summary), then SendMessage the manager exactly `RESEARCH_DONE: <path>` and nothing else. Never echo findings into your message. If you cannot complete, write what you gathered to the path and SendMessage `RESEARCH_BLOCKED: <path> — <one-line reason>` instead.
+Use `Skill('claude-toolkit:research-deposit')` to deliver your findings and signal completion. You will receive a `DEPOSIT: <path>` parameter — write your **full findings** there with the `Write` tool (the complete report, not a summary), then SendMessage the manager exactly `RESEARCH_DONE: <path>` and nothing else. Never echo findings into your message. If you cannot complete, write what you gathered to the path and SendMessage `RESEARCH_BLOCKED: <path> — <one-line reason>` instead. A context warning naming your own token figure (≥200k, from the bundled checkpoint hook) is a cannot-complete signal: deposit what you have and send `RESEARCH_BLOCKED: <path> — context exhausted` rather than pushing on with degraded context.
 
 ## Tools
 
