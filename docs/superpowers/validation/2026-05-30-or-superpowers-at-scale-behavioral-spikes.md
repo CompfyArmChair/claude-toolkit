@@ -214,7 +214,8 @@ with at least one background teammate; real shipped thresholds (Spike 8 method:
 bloat context by Reading old-transcript noise; cross-check figures with a helper
 mirroring the hook's own `latest_main_thread_usage()` computation — for teammates,
 read `<project>/<session-id>/subagents/agent-<id>.jsonl` WITHOUT the sidechain
-filter).
+filter — i.e., count all assistant usage entries, do not skip
+`isSidechain: true` lines).
 
 **RED baseline (already recorded — Spike 8 facet 3):** a teammate was blocked at
 the MANAGER's figure (parent transcript, parent session_id); shared
@@ -227,13 +228,16 @@ the parent's `tool` key and suppressed the manager's own mid-turn announce).
    blocked with its **own** figure (the reason's `[N tokens used]` matches the
    teammate's `subagents/agent-<id>.jsonl` usage, not the parent transcript's).
 2. The manager's pools are untouched by the teammate's crossing: the parent state
-   file shows no `subagent_stop` write, and the manager's own subsequent crossing
-   still announces; the teammate's write lands in
+   file shows no `subagent_stop` write (mechanism check: the parent
+   `context-usage-<session_id>.json` is absent, or every key in it is unchanged
+   from before the teammate's crossing), and the manager's own subsequent
+   crossing still announces; the teammate's write lands in
    `context-usage-<session_id>--<agent_id>.json`.
 3. A manager crossing does **not** block teammates (a teammate turn-end after the
    manager passes 200k stays silent while the teammate is below threshold).
-4. A one-shot subagent completing on a ≥200k session shows **no** spurious
-   end-of-run block.
+4. A one-shot subagent completing on a ≥200k session (manager context ≥200k;
+   the one-shot's own transcript sub-200k) shows **no** spurious end-of-run
+   block.
 5. `stop_hook_active` guard + once-per-threshold hold **per agent**: the forced
    turn's own SubagentStop does not re-block, and the same agent's next turn-end
    below the next threshold stays silent.
