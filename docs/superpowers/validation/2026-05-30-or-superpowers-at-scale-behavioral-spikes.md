@@ -209,7 +209,9 @@ agent's own handover under a **per-agent** state identity
 (`context-usage-<session_id>--<agent_id>.json`); the manager's pools are untouched
 by teammate events; one-shot subagents stop receiving spurious end-of-run blocks.
 
-**Setup:** Plugin **1.5.2** installed (restart so the updated hook loads). A team
+**Setup:** Plugin **1.5.2+** installed (1.5.3 adds malformed-payload hardening
+only — the teammate scoping under test is identical; restart so the updated
+hook loads). A team
 with at least one background teammate; real shipped thresholds (Spike 8 method:
 bloat context by Reading old-transcript noise; cross-check figures with a helper
 mirroring the hook's own `latest_main_thread_usage()` computation — for teammates,
