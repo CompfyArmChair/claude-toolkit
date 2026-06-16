@@ -26,9 +26,9 @@ announces a checkpoint crossing exactly once per session, per event type:
                       the parent's transcript: mis-scoped measurement is
                       the bug this scoping fixes.
 
-Sensor, not policy (de-engineered in 1.5.4): every message reports the
-figure and the threshold, then defers to the agent's own operating
-instructions. What a crossing REQUIRES (e.g. the or-* tiers'
+Sensor, not policy: every message reports the figure, the threshold, and
+the resulting implication for reasoning quality, then leaves the response
+to the agent. What a crossing REQUIRES (e.g. the or-* tiers'
 handover-at-200k rule) is policy and lives in the agent manuals (F10 keeps
 it there); duplicating it in the hook's wording proved to be scope creep.
 
@@ -101,8 +101,8 @@ import sys
 from pathlib import Path
 
 # Informational wording (additionalContext on UserPromptSubmit/PostToolUse).
-# Sensor language only: report the figure and the threshold, then defer to
-# the agent's own operating instructions. What crossing a threshold REQUIRES
+# Sensor language only: report the figure, the threshold, and the resulting
+# implication for reasoning quality. What crossing a threshold REQUIRES
 # (e.g. the or-* tiers' handover-at-200k rule, F10) is policy and lives in
 # the agent manuals - never here.
 CHECKPOINTS = [
@@ -113,20 +113,21 @@ CHECKPOINTS = [
     ),
     (
         200_000,
-        "Context checkpoint 200k crossed. Consult your operating "
-        "instructions for how to handle this context warning.",
+        "Context checkpoint 200k crossed. You are well past the peak-quality "
+        "reasoning zone - recall of earlier context is less reliable and "
+        "multi-step reasoning is more error-prone than at the start.",
     ),
     (
         250_000,
-        "Context checkpoint 250k crossed - 50k past the 200k checkpoint. "
-        "Consult your operating instructions for how to handle this context "
-        "warning.",
+        "Context checkpoint 250k crossed. Reasoning quality is significantly "
+        "degraded - earlier context is increasingly likely to be missed, "
+        "misremembered, or contradicted.",
     ),
     (
         300_000,
-        "Context checkpoint 300k crossed - 100k past the 200k checkpoint. "
-        "Consult your operating instructions for how to handle this context "
-        "warning.",
+        "Context checkpoint 300k crossed. Reasoning quality is severely "
+        "degraded - expect dropped context, overlooked instructions, and "
+        "inconsistent output.",
     ),
 ]
 
@@ -134,29 +135,30 @@ CHECKPOINTS = [
 # DELIVERY channel, not enforcement: in inbox-driven loops only turn-end
 # events fire reliably (F20/F22), and additionalContext is discarded there,
 # so forcing one extra turn is the only way the warning reaches the agent.
-# The message explains the forced turn mechanically and defers, like every
-# checkpoint, to the agent's operating instructions. 100k is deliberately
-# absent: never force a turn for a sub-actionable checkpoint.
+# The message reports the implication for reasoning quality and explains the
+# forced turn mechanically. 100k is deliberately absent: never force a turn
+# for a sub-actionable checkpoint.
 ACTIONABLE_CHECKPOINTS = [
     (
         200_000,
-        "Context checkpoint 200k crossed (turn-end detection). This turn "
-        "was forced so the warning could reach you. Consult your operating "
-        "instructions for how to handle this context warning.",
+        "Context checkpoint 200k crossed (turn-end detection). You are well "
+        "past the peak-quality reasoning zone - recall of earlier context is "
+        "less reliable and multi-step reasoning is more error-prone than at "
+        "the start. This turn was forced so the warning could reach you.",
     ),
     (
         250_000,
-        "Context checkpoint 250k crossed (turn-end detection) - 50k past "
-        "the 200k checkpoint. This turn was forced so the warning could "
-        "reach you. Consult your operating instructions for how to handle "
-        "this context warning.",
+        "Context checkpoint 250k crossed (turn-end detection). Reasoning "
+        "quality is significantly degraded - earlier context is increasingly "
+        "likely to be missed, misremembered, or contradicted. This turn was "
+        "forced so the warning could reach you.",
     ),
     (
         300_000,
-        "Context checkpoint 300k crossed (turn-end detection) - 100k past "
-        "the 200k checkpoint. This turn was forced so the warning could "
-        "reach you. Consult your operating instructions for how to handle "
-        "this context warning.",
+        "Context checkpoint 300k crossed (turn-end detection). Reasoning "
+        "quality is severely degraded - expect dropped context, overlooked "
+        "instructions, and inconsistent output. This turn was forced so the "
+        "warning could reach you.",
     ),
 ]
 
