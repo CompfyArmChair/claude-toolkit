@@ -77,6 +77,8 @@ Use WebFetch on promising results to extract:
 - Any data or evidence cited
 - The context (when written, what scale, what domain)
 
+**Only fetched content counts as a source.** A search result's title or snippet is a lead, not a source — you may cite only pages whose content you actually retrieved with WebFetch. Record the access date as you fetch; the Sources list requires it.
+
 ## Step 4: Evaluate Results
 
 For each research area, evaluate:
@@ -89,7 +91,7 @@ If insufficient, perform targeted follow-up searches. **Maximum 3 follow-up cycl
 
 ## Step 5: Synthesize Decision Report
 
-**CRITICAL**: Every claim must be traceable to a source. Use inline citations [1], [2] etc.
+**CRITICAL**: Every factual claim must be traceable to a source. Use inline citations [1], [2] etc.
 
 ```markdown
 ## Community Research: [Topic]
@@ -133,11 +135,22 @@ If insufficient, perform targeted follow-up searches. **Maximum 3 follow-up cycl
 [Not a recommendation, but clarity on what factors should drive the decision]
 
 ### Sources
-[1] [Title](URL) - Brief description of perspective/context
-[2] [Title](URL) - Brief description
-[3] [Title](URL) - Brief description
+[1] [Title](URL) - Brief description of perspective/context. Accessed YYYY-MM-DD.
+    > "Verbatim excerpt that supports the claims citing [1]"
+[2] [Title](URL) - Brief description. Accessed YYYY-MM-DD.
+    > "Verbatim excerpt that supports the claims citing [2]"
 ...
 ```
+
+## Step 6: Verify Every Claim
+
+Before delivering, walk the report claim by claim:
+
+1. For each inline citation, re-read the excerpt in the matching Sources entry. Does it actually support the claim as written? If not: fix the claim, fix the mapping, or re-fetch to find real support.
+2. Any statement without a citation must be labeled inline as `(inference — no source)` — unless it merely restates the request or the report's own structure.
+3. Confirm every Sources entry has a URL, an access date, and a verbatim excerpt.
+
+Deliver only after this pass is clean.
 
 # Source Quality Assessment
 
@@ -155,6 +168,9 @@ Include sources of varying quality but note the distinction.
 - **Note the date/context** when relevant (a 2019 blog post may reflect outdated practices)
 - **Distinguish between**: official docs, authoritative blogs, community discussions, individual opinions
 - **When sources conflict**, cite both sides
+- **Cite only sources you actually fetched** - search-result titles and snippets are leads, not sources
+- **Every source entry carries an access date and a verbatim supporting excerpt** - claims must be verifiable without re-fetching
+- **Label unsourced statements** as `(inference — no source)` - never present inference as sourced fact
 
 # What NOT To Do
 
@@ -164,3 +180,6 @@ Include sources of varying quality but note the distinction.
 - Do NOT conflate old advice with current best practices
 - Do NOT ignore minority viewpoints if they have valid rationales
 - Do NOT present opinions as facts
+- Do NOT cite a source you did not actually fetch
+- Do NOT present inference as sourced fact - label it `(inference — no source)`
+- Do NOT deliver without the Step 6 claim-by-claim verification pass

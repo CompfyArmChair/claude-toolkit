@@ -3,7 +3,7 @@
   "owner": { "name": "marti" },
   "metadata": {
     "description": "Agents, commands, skills, and hooks for code review, research, and development workflows",
-    "version": "1.5.5",
+    "version": "1.6.0",
     "pluginRoot": "./plugins"
   },
   "plugins": [
@@ -11,7 +11,7 @@
       "name": "claude-toolkit",
       "source": "./plugins/claude-toolkit",
       "description": "Architecture and test review agents, research agents, a 3-tier brainstorm-to-ship orchestrator (or-superpowers-at-scale), development workflow commands, MCP/skill design guides, and a context-window checkpoint hook",
-      "version": "1.5.5"
+      "version": "1.6.0"
     }
   ]
 }

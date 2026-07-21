@@ -7,8 +7,8 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 ### Agents
 - **architecture-reviewer** — Production code review against DI, configuration, layer separation, API design, naming, and SRP rules
 - **test-reviewer** — Test code review against mocking practices, test setup patterns, and test isolation rules
-- **community-researcher** — Research how the community solves problems, surface trade-offs and real-world experience
-- **dependency-researcher** — Research library/SDK documentation from multiple sources, return focused cited reports
+- **community-researcher** — Research how the community solves problems, surface trade-offs and real-world experience; saves a cited report to docs/research/ and replies with a digest plus the path
+- **dependency-researcher** — Research library/SDK documentation from multiple sources; saves a cited report to docs/research/ and replies with a digest plus the path
 - **violation-verifier** — Verify whether flagged architectural violations are real or false positives
 
 **or-superpowers-at-scale orchestrator agents** (internal — spawned by the orchestrator, not for standalone use):
@@ -32,6 +32,7 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 - **updating-plugin** — Checklist for modifying an existing plugin: version bumps, manifest sync, and common mistakes
 - **or-superpowers-at-scale** — User-invocable 3-tier orchestrator: brainstorm → plan → implement → ship, with the manager's context preserved (`/or-superpowers-at-scale [<idea> | <spec> | <plan>]`; depends on superpowers plugin)
 - **research-deposit** — Deposit protocol: research agents write findings to disk and reply with a minimal token
+- **research-persistence** — Standalone delivery protocol: researchers save the full report to docs/research/ and reply with a digest plus the path
 - **dependency-research-methodology** — Shared library/SDK research-and-citation workflow (used by the dependency researchers)
 - **community-research-methodology** — Shared community/real-world research workflow (used by the community researchers)
 
