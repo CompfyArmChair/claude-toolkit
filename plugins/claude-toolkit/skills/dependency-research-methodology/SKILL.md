@@ -52,6 +52,8 @@ For each research area, fetch from BOTH sources in parallel — they complement 
 
 Run independent research areas in parallel where possible.
 
+**Only fetched content counts as a source.** A search result's title or snippet is a lead, not a source — you may cite only pages whose content you actually retrieved (WebFetch) and Context7 results you actually received. Record the access date as you fetch; the Sources list requires it.
+
 ## Step 4: Evaluate Results
 
 For each research area, evaluate against the objective:
@@ -104,11 +106,25 @@ Source: [1]
 - [Unresolved gap - no source found]
 
 ### Sources
-[1] [Title](URL) - Official docs
-[2] [Title](URL) - Blog post, YYYY-MM
-[3] Context7: [library-id] - API reference
-[4] [Title](URL) - Stack Overflow
+[1] [Title](URL) - Official docs. Accessed YYYY-MM-DD.
+    > "Verbatim excerpt that supports the claims citing [1]"
+[2] [Title](URL) - Blog post, YYYY-MM. Accessed YYYY-MM-DD.
+    > "Verbatim excerpt that supports the claims citing [2]"
+[3] Context7: [library-id] - API reference. Accessed YYYY-MM-DD.
+    > "Verbatim excerpt from the returned documentation"
+[4] [Title](URL) - Stack Overflow. Accessed YYYY-MM-DD.
+    > "Verbatim excerpt that supports the claims citing [4]"
 ```
+
+## Step 6: Verify Every Claim
+
+Before delivering, walk the report claim by claim:
+
+1. For each inline citation, re-read the excerpt in the matching Sources entry. Does it actually support the claim as written? If not: fix the claim, fix the mapping, or re-fetch to find real support.
+2. Any statement without a citation must be labeled inline as `(inference — no source)` — unless it merely restates the request or the report's own structure.
+3. Confirm every Sources entry has a link (URL or Context7 id), an access date, and a verbatim excerpt.
+
+Deliver only after this pass is clean.
 
 # Citation Requirements
 
@@ -118,6 +134,9 @@ Source: [1]
 - **Note source types**: official docs, blogs (with date), SO answers, Context7
 - **Include dates** for blog posts and SO answers (documentation can be outdated)
 - **When sources conflict**, note both with citations
+- **Cite only sources you actually fetched** - search-result titles and snippets are leads, not sources
+- **Every source entry carries an access date and a verbatim supporting excerpt** - claims must be verifiable without re-fetching
+- **Label unsourced statements** as `(inference — no source)` - never present inference as sourced fact
 
 # What NOT To Do
 
@@ -126,3 +145,6 @@ Source: [1]
 - Do NOT return entire API references
 - Do NOT include sections unrelated to the objective
 - Do NOT exceed 3 follow-up cycles per research area
+- Do NOT cite a source you did not actually fetch
+- Do NOT present inference as sourced fact - label it `(inference — no source)`
+- Do NOT deliver without the Step 6 claim-by-claim verification pass
