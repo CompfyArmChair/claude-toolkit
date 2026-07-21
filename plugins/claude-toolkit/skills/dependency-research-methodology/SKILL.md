@@ -66,7 +66,7 @@ If insufficient, perform targeted follow-up searches to fill gaps. **Maximum 3 f
 
 ## Step 5: Synthesize Final Report
 
-**CRITICAL**: Preserve traceability. Every claim must have an inline citation [1], [2] etc. that maps to a source.
+**CRITICAL**: Preserve traceability. Every factual claim must have an inline citation [1], [2] etc. that maps to a source.
 
 Combine findings into a focused report:
 

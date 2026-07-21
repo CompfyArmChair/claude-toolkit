@@ -91,7 +91,7 @@ If insufficient, perform targeted follow-up searches. **Maximum 3 follow-up cycl
 
 ## Step 5: Synthesize Decision Report
 
-**CRITICAL**: Every claim must be traceable to a source. Use inline citations [1], [2] etc.
+**CRITICAL**: Every factual claim must be traceable to a source. Use inline citations [1], [2] etc.
 
 ```markdown
 ## Community Research: [Topic]
