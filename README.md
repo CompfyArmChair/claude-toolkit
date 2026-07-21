@@ -32,6 +32,7 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 - **updating-plugin** — Checklist for modifying an existing plugin: version bumps, manifest sync, and common mistakes
 - **or-superpowers-at-scale** — User-invocable 3-tier orchestrator: brainstorm → plan → implement → ship, with the manager's context preserved (`/or-superpowers-at-scale [<idea> | <spec> | <plan>]`; depends on superpowers plugin)
 - **research-deposit** — Deposit protocol: research agents write findings to disk and reply with a minimal token
+- **research-persistence** — Standalone delivery protocol: researchers save the full report to docs/research/ and reply with a digest plus the path
 - **dependency-research-methodology** — Shared library/SDK research-and-citation workflow (used by the dependency researchers)
 - **community-research-methodology** — Shared community/real-world research workflow (used by the community researchers)
 
