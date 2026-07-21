@@ -26,11 +26,15 @@ announces a checkpoint crossing exactly once per session, per event type:
                       the parent's transcript: mis-scoped measurement is
                       the bug this scoping fixes.
 
-Sensor, not policy: every message reports the figure, the threshold, and
-the resulting implication for reasoning quality, then leaves the response
-to the agent. What a crossing REQUIRES (e.g. the or-* tiers'
-handover-at-200k rule) is policy and lives in the agent manuals (F10 keeps
-it there); duplicating it in the hook's wording proved to be scope creep.
+Advisory plus instruction (design change 2026-07-21, reversing the earlier
+sensor-only stance): every message reports the figure, the threshold, and
+the resulting implication for reasoning quality; the ACTIONABLE (>= 200k)
+messages additionally carry the baseline instruction - wrap up and use
+/handover - escalating to "stop immediately" at 250k/300k, and at 300k
+noting that work quality may have been compromised. The sub-actionable
+100k checkpoint stays advisory-only. Tier-specific protocol detail (e.g.
+the or-* tiers' handover choreography, F10) still lives in the agent
+manuals; the hook's instruction is the baseline, not the full protocol.
 
 Why turn-end events (E2E findings F20/F22): in inbox-driven team loops both
 UserPromptSubmit and PostToolUse are starved - teammate-inbox deliveries
@@ -47,9 +51,11 @@ once-per-threshold state prevents re-announcing the same threshold.
 
 Checkpoints (cumulative tokens):
   100,000  - informational only. Left the 0-100k prime-thinking zone.
-  200,000  - ACTIONABLE: also delivered via the turn-end block.
-  250,000  - ACTIONABLE: 50k past the 200k checkpoint.
-  300,000  - ACTIONABLE: 100k past the 200k checkpoint.
+  200,000  - ACTIONABLE: also delivered via the turn-end block. Instructs:
+             wrap up and use /handover.
+  250,000  - ACTIONABLE: instructs: stop immediately, wrap up, /handover.
+  300,000  - ACTIONABLE: as 250k, plus note that work quality may have
+             been compromised.
 
 State files (one JSON per measurement identity):
   main loop:  ~/.claude/hooks/state/context-usage-<session_id>.json
@@ -101,10 +107,11 @@ import sys
 from pathlib import Path
 
 # Informational wording (additionalContext on UserPromptSubmit/PostToolUse).
-# Sensor language only: report the figure, the threshold, and the resulting
-# implication for reasoning quality. What crossing a threshold REQUIRES
-# (e.g. the or-* tiers' handover-at-200k rule, F10) is policy and lives in
-# the agent manuals - never here.
+# Each message reports the figure, the threshold, and the resulting
+# implication for reasoning quality; the >=200k messages then instruct the
+# baseline response (wrap up + /handover, escalating per tier). 100k stays
+# advisory-only. Tier-specific protocol detail (or-* manuals, F10) is not
+# duplicated here.
 CHECKPOINTS = [
     (
         100_000,
@@ -115,19 +122,24 @@ CHECKPOINTS = [
         200_000,
         "Context checkpoint 200k crossed. You are well past the peak-quality "
         "reasoning zone - recall of earlier context is less reliable and "
-        "multi-step reasoning is more error-prone than at the start.",
+        "multi-step reasoning is more error-prone than at the start. "
+        "Wrap up your current work and use /handover to continue in a "
+        "fresh session.",
     ),
     (
         250_000,
         "Context checkpoint 250k crossed. Reasoning quality is significantly "
         "degraded - earlier context is increasingly likely to be missed, "
-        "misremembered, or contradicted.",
+        "misremembered, or contradicted. Stop immediately: wrap up and use "
+        "/handover to continue in a fresh session.",
     ),
     (
         300_000,
         "Context checkpoint 300k crossed. Reasoning quality is severely "
         "degraded - expect dropped context, overlooked instructions, and "
-        "inconsistent output.",
+        "inconsistent output. Stop immediately: wrap up and use /handover "
+        "to continue in a fresh session, noting in the handover that work "
+        "quality may have been compromised.",
     ),
 ]
 
@@ -135,30 +147,36 @@ CHECKPOINTS = [
 # DELIVERY channel, not enforcement: in inbox-driven loops only turn-end
 # events fire reliably (F20/F22), and additionalContext is discarded there,
 # so forcing one extra turn is the only way the warning reaches the agent.
-# The message reports the implication for reasoning quality and explains the
-# forced turn mechanically. 100k is deliberately absent: never force a turn
-# for a sub-actionable checkpoint.
+# The message reports the implication for reasoning quality, explains the
+# forced turn mechanically, then instructs the baseline response (wrap up +
+# /handover, escalating per tier). 100k is deliberately absent: never force
+# a turn for a sub-actionable checkpoint.
 ACTIONABLE_CHECKPOINTS = [
     (
         200_000,
         "Context checkpoint 200k crossed (turn-end detection). You are well "
         "past the peak-quality reasoning zone - recall of earlier context is "
         "less reliable and multi-step reasoning is more error-prone than at "
-        "the start. This turn was forced so the warning could reach you.",
+        "the start. This turn was forced so the warning could reach you. "
+        "Wrap up your current work and use /handover to continue in a "
+        "fresh session.",
     ),
     (
         250_000,
         "Context checkpoint 250k crossed (turn-end detection). Reasoning "
         "quality is significantly degraded - earlier context is increasingly "
         "likely to be missed, misremembered, or contradicted. This turn was "
-        "forced so the warning could reach you.",
+        "forced so the warning could reach you. Stop immediately: wrap up "
+        "and use /handover to continue in a fresh session.",
     ),
     (
         300_000,
         "Context checkpoint 300k crossed (turn-end detection). Reasoning "
         "quality is severely degraded - expect dropped context, overlooked "
         "instructions, and inconsistent output. This turn was forced so the "
-        "warning could reach you.",
+        "warning could reach you. Stop immediately: wrap up and use "
+        "/handover to continue in a fresh session, noting in the handover "
+        "that work quality may have been compromised.",
     ),
 ]
 

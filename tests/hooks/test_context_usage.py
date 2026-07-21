@@ -164,25 +164,34 @@ class ContextUsageHookTests(unittest.TestCase):
         self.assertEqual(out["decision"], "block")
         self.assertIn("200k", out["reason"])
 
-    def test_turn_end_reasons_are_sensor_language_at_every_tier(self):
-        # The hook is a SENSOR: each message reports the figure, the
-        # threshold, and the resulting implication for reasoning quality.
-        # It must NOT defer vaguely ("operating instructions") and must NOT
-        # prescribe policy (the or-* tiers' mandatory-handover rule, F10,
-        # lives in the agent manuals). Escalation walks all three actionable
-        # tiers in one session.
+    def test_turn_end_reasons_carry_advisory_and_instruction_at_every_tier(self):
+        # 2026-07-21 design change: each >=200k message keeps the sensor
+        # advisory (figure, threshold, reasoning-quality implication) AND
+        # carries the baseline instruction - wrap up and use /handover.
+        # 250k/300k escalate to "stop immediately"; 300k additionally notes
+        # that work quality may have been compromised. Vague deferral
+        # ("operating instructions") stays banned. Escalation walks all
+        # three actionable tiers in one session.
+        reasons = {}
         for tokens, tier in (
             (210_000, "200k"),
             (260_000, "250k"),
             (310_000, "300k"),
         ):
+            reasons[tier] = json.loads(self.run_hook("Stop", tokens))["reason"]
+        for tier, reason in reasons.items():
             with self.subTest(tier=tier):
-                reason = json.loads(self.run_hook("Stop", tokens))["reason"]
                 self.assertIn(tier, reason)
-                self.assertIn("reasoning", reason.lower())
+                self.assertIn("reasoning", reason.lower())    # advisory kept
+                self.assertIn("wrap up", reason.lower())      # instruction
+                self.assertIn("/handover", reason)
                 self.assertNotIn("operating instructions", reason.lower())
-                for policy_word in ("handover", "hand over", "mandatory"):
-                    self.assertNotIn(policy_word, reason.lower())
+        self.assertNotIn("stop immediately", reasons["200k"].lower())
+        self.assertIn("stop immediately", reasons["250k"].lower())
+        self.assertIn("stop immediately", reasons["300k"].lower())
+        self.assertNotIn("compromised", reasons["200k"].lower())
+        self.assertNotIn("compromised", reasons["250k"].lower())
+        self.assertIn("compromised", reasons["300k"].lower())
 
     # --- SubagentStop: teammate-scoped measurement (Spike 8 facet 3) ---
     # The agent's OWN transcript is measured (sidechain filter lifted - agent
@@ -344,17 +353,42 @@ class ContextUsageHookTests(unittest.TestCase):
         self.assertEqual(ctx["hookEventName"], "UserPromptSubmit")
         self.assertIn("200k", ctx["additionalContext"])
 
-    def test_informational_warnings_are_sensor_language(self):
-        # Same sensor split on the informational path: the >=200k
-        # additionalContext warnings report the implication for reasoning
-        # quality, without the vague "operating instructions" deferral and
-        # without prescribing the handover protocol.
-        out = json.loads(self.run_hook("UserPromptSubmit", 210_000))
+    def test_informational_warnings_carry_advisory_and_instruction(self):
+        # Same advisory+instruction wording on the informational path: the
+        # >=200k additionalContext warnings report the reasoning-quality
+        # implication AND instruct wrap-up + /handover, with the same
+        # escalation as the turn-end path (250k/300k stop immediately,
+        # 300k notes possible quality compromise).
+        contexts = {}
+        for tokens, tier in (
+            (210_000, "200k"),
+            (260_000, "250k"),
+            (310_000, "300k"),
+        ):
+            out = json.loads(self.run_hook("UserPromptSubmit", tokens))
+            contexts[tier] = out["hookSpecificOutput"]["additionalContext"]
+        for tier, ctx in contexts.items():
+            with self.subTest(tier=tier):
+                self.assertIn(tier, ctx)
+                self.assertIn("reasoning", ctx.lower())       # advisory kept
+                self.assertIn("wrap up", ctx.lower())         # instruction
+                self.assertIn("/handover", ctx)
+                self.assertNotIn("operating instructions", ctx.lower())
+        self.assertNotIn("stop immediately", contexts["200k"].lower())
+        self.assertIn("stop immediately", contexts["250k"].lower())
+        self.assertIn("stop immediately", contexts["300k"].lower())
+        self.assertNotIn("compromised", contexts["200k"].lower())
+        self.assertNotIn("compromised", contexts["250k"].lower())
+        self.assertIn("compromised", contexts["300k"].lower())
+
+    def test_100k_checkpoint_stays_advisory_only(self):
+        # The sub-actionable 100k checkpoint carries no instruction: it is
+        # context, not a directive to hand over.
+        out = json.loads(self.run_hook("UserPromptSubmit", 110_000))
         ctx = out["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("reasoning", ctx.lower())
-        self.assertNotIn("operating instructions", ctx.lower())
-        for policy_word in ("handover", "hand over", "mandatory"):
-            self.assertNotIn(policy_word, ctx.lower())
+        self.assertIn("100k", ctx)
+        self.assertNotIn("/handover", ctx)
+        self.assertNotIn("wrap up", ctx.lower())
 
     def test_tool_event_announces_once(self):
         first = self.run_hook("PostToolUse", 110_000)
