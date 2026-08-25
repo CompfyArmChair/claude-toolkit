@@ -41,8 +41,8 @@ to an existing markdown deposit. Flips the deposit's frontmatter `tier` from
 `script` to `courier`, appends the staging file's text after a timestamped
 separator, and prints one JSON line.
 
-- success: `{ok: true, path, appendedBytes, appendedLines, stagingRemoved}`
-- failure: `{ok: false, path, reason}`
+- success: `{verdict: "OK", path, appendedBytes, appendedLines, stagingRemoved, reasons: []}`
+- failure: `{verdict: "FAIL", path, reasons: ["<reason>"]}`
 
 ## Exit codes
 
@@ -51,8 +51,8 @@ separator, and prints one JSON line.
 | `index.js` | 0 | `OK` |
 | `index.js` | 1 | `FAIL` |
 | `index.js` | 2 | `ESCALATE` |
-| `courier-append.js` | 0 | `ok: true` |
-| `courier-append.js` | 1 | `ok: false` |
+| `courier-append.js` | 0 | `OK` |
+| `courier-append.js` | 1 | `FAIL` |
 
 ## The one-JSON-line rule
 

@@ -13,7 +13,7 @@ function emit(result, code) {
 }
 
 function fail(depositPath, reason) {
-  emit({ ok: false, path: depositPath ?? null, reason }, 1);
+  emit({ verdict: 'FAIL', path: depositPath ?? null, reasons: [reason] }, 1);
 }
 
 async function main() {
@@ -78,11 +78,12 @@ async function main() {
     }
 
     return emit({
-      ok: true,
+      verdict: 'OK',
       path: depositArg,
       appendedBytes: Buffer.byteLength(appended, 'utf8'),
       appendedLines: appended.split('\n').length - 1,
       stagingRemoved,
+      reasons: [],
     }, 0);
   } catch (err) {
     return fail(depositArg, `io:${err.code ?? err.name}`);

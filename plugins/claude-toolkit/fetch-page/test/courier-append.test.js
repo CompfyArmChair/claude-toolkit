@@ -53,12 +53,13 @@ test('happy path: tier flips, separator + staging text appended verbatim, stagin
 
   const { exit, json } = await run(t, [depositPath, stagingPath]);
   assert.equal(exit, 0);
-  assert.equal(json.ok, true);
+  assert.equal(json.verdict, 'OK');
   assert.equal(json.path, depositPath);
   assert.equal(typeof json.appendedBytes, 'number');
   assert.equal(typeof json.appendedLines, 'number');
   assert.ok(json.appendedBytes > 0);
   assert.ok(json.appendedLines > 0);
+  assert.deepEqual(json.reasons, []);
   // I1: the append is the commit point; staging removal is a best-effort
   // epilogue reported back rather than assumed.
   assert.equal(json.stagingRemoved, true);
@@ -99,8 +100,8 @@ test('.pdf deposit: not-a-markdown-deposit, both files untouched', async (t) => 
 
   const { exit, json } = await run(t, [depositPath, stagingPath]);
   assert.equal(exit, 1);
-  assert.equal(json.ok, false);
-  assert.equal(json.reason, 'not-a-markdown-deposit');
+  assert.equal(json.verdict, 'FAIL');
+  assert.deepEqual(json.reasons, ['not-a-markdown-deposit']);
 
   assert.deepEqual(fs.readFileSync(depositPath), depositBytes);
   assert.ok(fs.existsSync(stagingPath), 'staging file must survive a rejected append');
@@ -116,8 +117,8 @@ test('deposit already tier: courier: no-script-tier, both files unchanged', asyn
 
   const { exit, json } = await run(t, [depositPath, stagingPath]);
   assert.equal(exit, 1);
-  assert.equal(json.ok, false);
-  assert.equal(json.reason, 'no-script-tier');
+  assert.equal(json.verdict, 'FAIL');
+  assert.deepEqual(json.reasons, ['no-script-tier']);
 
   assert.deepEqual(fs.readFileSync(depositPath), originalBytes);
   assert.equal(fs.readFileSync(stagingPath, 'utf8'), stagingText);
@@ -131,8 +132,8 @@ test('missing staging file: staging-not-found', async (t) => {
 
   const { exit, json } = await run(t, [depositPath, stagingPath]);
   assert.equal(exit, 1);
-  assert.equal(json.ok, false);
-  assert.equal(json.reason, 'staging-not-found');
+  assert.equal(json.verdict, 'FAIL');
+  assert.deepEqual(json.reasons, ['staging-not-found']);
   assert.deepEqual(fs.readFileSync(depositPath), originalBytes);
 });
 
@@ -145,8 +146,8 @@ test('empty (whitespace-only) staging: empty-staging, both files unchanged', asy
 
   const { exit, json } = await run(t, [depositPath, stagingPath]);
   assert.equal(exit, 1);
-  assert.equal(json.ok, false);
-  assert.equal(json.reason, 'empty-staging');
+  assert.equal(json.verdict, 'FAIL');
+  assert.deepEqual(json.reasons, ['empty-staging']);
   assert.deepEqual(fs.readFileSync(depositPath), originalBytes);
   assert.ok(fs.existsSync(stagingPath));
 });
@@ -154,5 +155,5 @@ test('empty (whitespace-only) staging: empty-staging, both files unchanged', asy
 test('no arguments: missing-argument, path null', async (t) => {
   const { exit, json } = await run(t, []);
   assert.equal(exit, 1);
-  assert.deepEqual(json, { ok: false, path: null, reason: 'missing-argument' });
+  assert.deepEqual(json, { verdict: 'FAIL', path: null, reasons: ['missing-argument'] });
 });
