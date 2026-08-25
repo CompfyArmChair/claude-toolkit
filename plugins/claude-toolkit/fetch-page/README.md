@@ -11,20 +11,22 @@ enforces this substitute for WebFetch all live in the spec:
 
 ## Install
 
-```
-npm ci
-```
-
-in this directory. This is a prerequisite, not an optional step: without
-`node_modules` present, running either entry point below fails at module
-load with an `ERR_MODULE_NOT_FOUND` stack printed to stderr and **no JSON
-line at all** on stdout - the FAIL exit code with a shape no consumer of
-this CLI is prepared for. A plugin packaging this script must run `npm ci`
-here as part of its own install step.
+Handled automatically: the launcher (`bin/fetch-page.js`, the only supported
+entry point) runs `npm ci` in this directory once, on first use, when
+`node_modules` is missing (npm output goes to stderr). If npm fails, the
+launcher still honours the one-JSON-line contract: it prints
+`{"verdict":"FAIL","path":null,"url":...,"reasons":["install:<code>"]}` and
+exits 1. Running `npm ci` here manually also works and is required before
+`npm test`.
 
 ## Entry points
 
-### `node <this-directory> <url>`
+### `node bin/fetch-page.js <url>`
+
+The launcher ensures dependencies are installed, then forwards argv and exit
+code verbatim to `index.js`. Invoking `index.js` or the package directory
+directly still works once deps are installed, but the launcher is the only
+documented invocation.
 
 Fetches `<url>`, extracts readable content (or passes it through verbatim
 for PDF and raw-text content types), classifies a verdict, and writes a
