@@ -7,7 +7,7 @@ synthesizes an answer.
 
 Rationale, the full pipeline (tier 2, the courier), and the hook that
 enforces this substitute for WebFetch all live in the spec:
-`~/.claude/docs/superpowers/specs/2026-08-08-webfetch-ban-raw-fetch-pipeline-design.md`.
+`docs/superpowers/specs/2026-08-08-webfetch-ban-raw-fetch-pipeline-design.md` in the claude-toolkit repo (https://github.com/CompfyArmChair/claude-toolkit).
 
 ## Install
 
