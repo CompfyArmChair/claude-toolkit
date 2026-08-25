@@ -1,7 +1,7 @@
 ---
 name: or-community-researcher
 description: Phase-3 community/real-world research teammate for the or-superpowers-at-scale orchestrator. The manager spawns this deposit-aware agent as a background teammate via the SPAWN_RESEARCH broker; it researches how the community solves a problem, writes its full findings to the DEPOSIT path, and signals the manager with a single RESEARCH_DONE token. Not for standalone use.
-tools: Read, Grep, Glob, WebFetch, WebSearch, Write, Skill, SendMessage
+tools: Read, Grep, Glob, Bash, WebSearch, Write, Skill, SendMessage
 model: opus
 skills: [community-research-methodology, research-deposit]
 ---

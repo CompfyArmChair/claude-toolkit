@@ -1,7 +1,7 @@
 ---
 name: community-researcher
 description: Community knowledge specialist for design decisions and trade-offs. Use when evaluating approaches, considering alternatives, or needing real-world context on how problems are solved in practice. Saves a fully-cited report to docs/research/ and replies with a digest plus the file path.
-tools: Glob, Grep, Read, WebFetch, WebSearch, Write, Skill
+tools: Glob, Grep, Read, Bash, WebSearch, Write, Skill
 model: opus
 skills: [community-research-methodology, research-persistence]
 ---

@@ -71,13 +71,21 @@ For each research query, use WebSearch with targeted queries across different so
 "[topic] [trade-offs OR experience OR lessons learned]"
 ```
 
-Use WebFetch on promising results to extract:
+Fetch promising results through the raw-fetch pipeline (below), then Read the deposits to extract:
 - The core argument or experience
 - Supporting rationale
 - Any data or evidence cited
 - The context (when written, what scale, what domain)
 
-**Only fetched content counts as a source.** A search result's title or snippet is a lead, not a source — you may cite only pages whose content you actually retrieved with WebFetch. Record the access date as you fetch; the Sources list requires it.
+### Fetching pages: the raw-fetch pipeline
+
+WebFetch is banned — it summarises pages through a small side-model that fabricates. Fetch every page with the pipeline CLI instead:
+
+1. Run: `node "<skill-base-dir>/../../fetch-page/bin/fetch-page.js" <url>` — `<skill-base-dir>` is the absolute path announced when this skill loaded ("Base directory for this skill: ..."). The command prints ONE JSON line `{verdict, path, helper, ...}` and never inlines page content.
+2. Read or Grep the **web deposit** — the file at `path`. (A web deposit is a fetched-page file; it is distinct from the or-* *research deposit*, the path where deposit-aware teammates deliver their report.)
+3. On verdict `ESCALATE` (bot wall / JS-only shell) or `FAIL`: you have no `Agent` tool, so you cannot spawn the page-courier yourself. Record the gap explicitly in the report — "URL X escalated (bot wall / JS shell); not fetched; findings exclude it" — and never answer from memory as if the page had been fetched. If you are an or-* teammate with `SendMessage`, you MAY ask your manager to arrange a courier run (send the URL plus the `path` and `helper` values from the JSON line); the manager decides.
+
+**Only deposited content counts as a source.** A search result's title or snippet is a lead, not a source — you may cite only pages with a web deposit to point at. Record the deposit path and access date as you fetch; the Sources list requires them, and every load-bearing claim cites `deposit-path:line`.
 
 ## Step 4: Evaluate Results
 
@@ -135,9 +143,9 @@ If insufficient, perform targeted follow-up searches. **Maximum 3 follow-up cycl
 [Not a recommendation, but clarity on what factors should drive the decision]
 
 ### Sources
-[1] [Title](URL) - Brief description of perspective/context. Accessed YYYY-MM-DD.
+[1] [Title](URL) - Brief description of perspective/context. Accessed YYYY-MM-DD. Deposit: `<web-deposit path>`
     > "Verbatim excerpt that supports the claims citing [1]"
-[2] [Title](URL) - Brief description. Accessed YYYY-MM-DD.
+[2] [Title](URL) - Brief description. Accessed YYYY-MM-DD. Deposit: `<web-deposit path>`
     > "Verbatim excerpt that supports the claims citing [2]"
 ...
 ```
@@ -148,7 +156,7 @@ Before delivering, walk the report claim by claim:
 
 1. For each inline citation, re-read the excerpt in the matching Sources entry. Does it actually support the claim as written? If not: fix the claim, fix the mapping, or re-fetch to find real support.
 2. Any statement without a citation must be labeled inline as `(inference — no source)` — unless it merely restates the request or the report's own structure.
-3. Confirm every Sources entry has a URL, an access date, and a verbatim excerpt.
+3. Confirm every Sources entry has a URL, an access date, and a verbatim excerpt, and — for web pages — the web-deposit path.
 
 Deliver only after this pass is clean.
 
@@ -168,7 +176,7 @@ Include sources of varying quality but note the distinction.
 - **Note the date/context** when relevant (a 2019 blog post may reflect outdated practices)
 - **Distinguish between**: official docs, authoritative blogs, community discussions, individual opinions
 - **When sources conflict**, cite both sides
-- **Cite only sources you actually fetched** - search-result titles and snippets are leads, not sources
+- **Cite only sources with a web deposit to point at** - search-result titles and snippets are leads, not sources
 - **Every source entry carries an access date and a verbatim supporting excerpt** - claims must be verifiable without re-fetching
 - **Label unsourced statements** as `(inference — no source)` - never present inference as sourced fact
 
@@ -180,6 +188,6 @@ Include sources of varying quality but note the distinction.
 - Do NOT conflate old advice with current best practices
 - Do NOT ignore minority viewpoints if they have valid rationales
 - Do NOT present opinions as facts
-- Do NOT cite a source you did not actually fetch
+- Do NOT cite a source without a web deposit to point at
 - Do NOT present inference as sourced fact - label it `(inference — no source)`
 - Do NOT deliver without the Step 6 claim-by-claim verification pass

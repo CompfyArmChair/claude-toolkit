@@ -1,7 +1,7 @@
 ---
 name: or-dependency-researcher
 description: Phase-3 dependency/library research teammate for the or-superpowers-at-scale orchestrator. The manager spawns this deposit-aware agent as a background teammate via the SPAWN_RESEARCH broker; it researches a library/SDK/API question, writes its full findings to the DEPOSIT path, and signals the manager with a single RESEARCH_DONE token. Not for standalone use.
-tools: Read, Grep, Glob, WebFetch, WebSearch, mcp__context7__resolve-library-id, mcp__context7__query-docs, Write, Skill, SendMessage
+tools: Read, Grep, Glob, Bash, WebSearch, mcp__context7__resolve-library-id, mcp__context7__query-docs, Write, Skill, SendMessage
 model: opus
 skills: [dependency-research-methodology, research-deposit]
 ---

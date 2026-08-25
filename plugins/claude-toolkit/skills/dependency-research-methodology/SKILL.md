@@ -48,11 +48,19 @@ For each research area, fetch from BOTH sources in parallel — they complement 
 
 **Web Search** (recent changes, blog posts, real-world examples):
 1. Search: `"[library] [topic] documentation [version if specified]"`
-2. Use WebFetch on relevant results
+2. Fetch relevant results through the raw-fetch pipeline (below) and Read the deposits
 
 Run independent research areas in parallel where possible.
 
-**Only fetched content counts as a source.** A search result's title or snippet is a lead, not a source — you may cite only pages whose content you actually retrieved (WebFetch) and Context7 results you actually received. Record the access date as you fetch; the Sources list requires it.
+### Fetching pages: the raw-fetch pipeline
+
+WebFetch is banned — it summarises pages through a small side-model that fabricates. Fetch every page with the pipeline CLI instead:
+
+1. Run: `node "<skill-base-dir>/../../fetch-page/bin/fetch-page.js" <url>` — `<skill-base-dir>` is the absolute path announced when this skill loaded ("Base directory for this skill: ..."). The command prints ONE JSON line `{verdict, path, helper, ...}` and never inlines page content.
+2. Read or Grep the **web deposit** — the file at `path`. (A web deposit is a fetched-page file; it is distinct from the or-* *research deposit*, the path where deposit-aware teammates deliver their report.)
+3. On verdict `ESCALATE` (bot wall / JS-only shell) or `FAIL`: you have no `Agent` tool, so you cannot spawn the page-courier yourself. Record the gap explicitly in the report — "URL X escalated (bot wall / JS shell); not fetched; findings exclude it" — and never answer from memory as if the page had been fetched. If you are an or-* teammate with `SendMessage`, you MAY ask your manager to arrange a courier run (send the URL plus the `path` and `helper` values from the JSON line); the manager decides.
+
+**Only deposited content counts as a source.** A search result's title or snippet is a lead, not a source — you may cite only pages with a web deposit to point at, and Context7 results you actually received. Record the deposit path and access date as you fetch; the Sources list requires them, and every load-bearing claim cites `deposit-path:line`.
 
 ## Step 4: Evaluate Results
 
@@ -106,13 +114,13 @@ Source: [1]
 - [Unresolved gap - no source found]
 
 ### Sources
-[1] [Title](URL) - Official docs. Accessed YYYY-MM-DD.
+[1] [Title](URL) - Official docs. Accessed YYYY-MM-DD. Deposit: `<web-deposit path>`
     > "Verbatim excerpt that supports the claims citing [1]"
-[2] [Title](URL) - Blog post, YYYY-MM. Accessed YYYY-MM-DD.
+[2] [Title](URL) - Blog post, YYYY-MM. Accessed YYYY-MM-DD. Deposit: `<web-deposit path>`
     > "Verbatim excerpt that supports the claims citing [2]"
 [3] Context7: [library-id] - API reference. Accessed YYYY-MM-DD.
     > "Verbatim excerpt from the returned documentation"
-[4] [Title](URL) - Stack Overflow. Accessed YYYY-MM-DD.
+[4] [Title](URL) - Stack Overflow. Accessed YYYY-MM-DD. Deposit: `<web-deposit path>`
     > "Verbatim excerpt that supports the claims citing [4]"
 ```
 
@@ -122,7 +130,7 @@ Before delivering, walk the report claim by claim:
 
 1. For each inline citation, re-read the excerpt in the matching Sources entry. Does it actually support the claim as written? If not: fix the claim, fix the mapping, or re-fetch to find real support.
 2. Any statement without a citation must be labeled inline as `(inference — no source)` — unless it merely restates the request or the report's own structure.
-3. Confirm every Sources entry has a link (URL or Context7 id), an access date, and a verbatim excerpt.
+3. Confirm every Sources entry has a link (URL or Context7 id), an access date, and a verbatim excerpt, and — for web pages — the web-deposit path.
 
 Deliver only after this pass is clean.
 
@@ -134,7 +142,7 @@ Deliver only after this pass is clean.
 - **Note source types**: official docs, blogs (with date), SO answers, Context7
 - **Include dates** for blog posts and SO answers (documentation can be outdated)
 - **When sources conflict**, note both with citations
-- **Cite only sources you actually fetched** - search-result titles and snippets are leads, not sources
+- **Cite only sources with a web deposit to point at** (Context7 results you received also count) - search-result titles and snippets are leads, not sources
 - **Every source entry carries an access date and a verbatim supporting excerpt** - claims must be verifiable without re-fetching
 - **Label unsourced statements** as `(inference — no source)` - never present inference as sourced fact
 
@@ -145,6 +153,6 @@ Deliver only after this pass is clean.
 - Do NOT return entire API references
 - Do NOT include sections unrelated to the objective
 - Do NOT exceed 3 follow-up cycles per research area
-- Do NOT cite a source you did not actually fetch
+- Do NOT cite a source without a web deposit (or received Context7 result) to point at
 - Do NOT present inference as sourced fact - label it `(inference — no source)`
 - Do NOT deliver without the Step 6 claim-by-claim verification pass

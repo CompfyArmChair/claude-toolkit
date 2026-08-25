@@ -1,7 +1,7 @@
 ---
 name: dependency-researcher
 description: Library research specialist for SDKs, frameworks, and APIs. Use whenever working with external libraries - for implementation, debugging, evaluation, or design. Reads documentation sources, saves a fully-cited report to docs/research/, and replies with a digest plus the file path.
-tools: Glob, Grep, Read, WebFetch, WebSearch, mcp__context7__resolve-library-id, mcp__context7__query-docs, Write, Skill
+tools: Glob, Grep, Read, Bash, WebSearch, mcp__context7__resolve-library-id, mcp__context7__query-docs, Write, Skill
 model: opus
 skills: [dependency-research-methodology, research-persistence]
 ---
