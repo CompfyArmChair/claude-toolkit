@@ -1,5 +1,7 @@
 # WebFetch Ban + Raw-Fetch Pipeline Implementation Plan
 
+> **Historical record — executed 2026-08-23 against `~/.claude`.** The pipeline has since moved into the claude-toolkit plugin (docs/superpowers/specs/2026-08-23-pipeline-plugin-move-design.md). The commands and paths below describe the original execution and are not current instructions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ban Claude Code's fabrication-prone WebFetch tool user-globally and replace it with a deterministic two-tier raw-fetch pipeline that deposits verbatim page content to files.

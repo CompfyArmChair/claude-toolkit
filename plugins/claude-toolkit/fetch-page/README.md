@@ -33,7 +33,7 @@ for PDF and raw-text content types), classifies a verdict, and writes a
 deposit file. Prints one JSON line on stdout; page content never appears on
 stdout under any verdict.
 
-- `OK` / `ESCALATE`: `{verdict, path, url, finalUrl, status, title, bytes, lines, format, reasons}`
+- `OK` / `ESCALATE`: `{verdict, path, helper, url, finalUrl, status, title, bytes, lines, format, reasons}` (`helper` is the absolute path of `courier-append.js`, present whenever `path` is non-null)
 - `FAIL`: `{verdict, path: null, url, reasons}` only - no `finalUrl`/`status`/etc.
 
 ### `node courier-append.js <deposit> <staging>`

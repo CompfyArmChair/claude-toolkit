@@ -58,6 +58,12 @@ network + npm on PATH); if npm fails it prints a one-line
 design: `docs/superpowers/specs/2026-08-08-webfetch-ban-raw-fetch-pipeline-design.md`
 and the delta `docs/superpowers/specs/2026-08-23-pipeline-plugin-move-design.md`.
 
+### Running the tests
+
+- fetch-page suite: `cd plugins/claude-toolkit/fetch-page && npm test`
+- hook tests: `node --test "tests/hooks/*.test.mjs"` (from the repo root; a bare directory argument fails on current Node)
+- python hook tests: `pytest tests/`
+
 ## Install
 
 ```bash

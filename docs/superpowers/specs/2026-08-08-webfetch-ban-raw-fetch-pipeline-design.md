@@ -224,7 +224,7 @@ say so — do not answer from memory as if it had been fetched.
 
 1. **Hook:** WebFetch on any URL from the main session → denied, teaching message
    surfaced. WebFetch from inside a spawned subagent → denied (proves R2's global
-   coverage, including plugin research agents whose tool lists still name WebFetch).
+   coverage, including plugin research agents whose tool lists still name WebFetch). *(Superseded 2026-08-25: the plugin researchers went pipeline-native in the plugin-move — see docs/superpowers/specs/2026-08-23-pipeline-plugin-move-design.md.)*
 2. **Script:** a static article page → `OK`, deposit content spot-checked against the
    live page; a client-side-rendered SPA → `ESCALATE` (thin extraction); Reddit →
    `ESCALATE` (bot wall); a PDF URL → `OK` with `format: pdf`; a dead domain → `FAIL`.
@@ -267,4 +267,4 @@ say so — do not answer from memory as if it had been fetched.
   a separate decision.
 - **Teaching the pipeline natively to claude-toolkit's research agents:** their
   definitions live in the claude-toolkit repo; the hook already covers them by
-  deny-and-teach. A follow-up in that repo may make them pipeline-native.
+  deny-and-teach. A follow-up in that repo may make them pipeline-native. *(Superseded 2026-08-25: the plugin researchers went pipeline-native in the plugin-move — see docs/superpowers/specs/2026-08-23-pipeline-plugin-move-design.md.)*
