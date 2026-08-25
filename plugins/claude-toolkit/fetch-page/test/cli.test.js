@@ -125,6 +125,9 @@ test('generic HTML article: OK, markdown deposit under cwd, absolute links, no c
   // one high because the deposit always ends with a trailing newline.
   const newlineCount = deposit.split('\n').length - 1;
   assert.equal(json.lines, newlineCount, 'lines must count newlines, matching courier-append.js\'s convention');
+  assert.ok(json.helper.endsWith('/courier-append.js'), `helper must point at courier-append.js: ${json.helper}`);
+  assert.ok(!json.helper.includes('\\'), 'helper must use forward slashes');
+  assert.ok(fs.existsSync(json.helper), 'helper must exist on disk');
 });
 
 test('redirect: finalUrl records the destination', async (t) => {
@@ -141,6 +144,9 @@ test('thin page: ESCALATE, exit 2, stub carries the marker blockquote', async (t
   const deposit = fs.readFileSync(json.path, 'utf8');
   assert.ok(deposit.includes('> fetch-page verdict: ESCALATE'));
   assert.ok(deposit.includes('tiny'), 'ESCALATE stub must retain the thin text that was extracted (M4)');
+  assert.ok(json.helper.endsWith('/courier-append.js'), `helper must point at courier-append.js: ${json.helper}`);
+  assert.ok(!json.helper.includes('\\'), 'helper must use forward slashes');
+  assert.ok(fs.existsSync(json.helper), 'helper must exist on disk');
 });
 
 test('HTTP 403: ESCALATE with http-403 among the reasons', async (t) => {
@@ -168,6 +174,9 @@ test('pdf: raw-bytes passthrough to a .pdf deposit', async (t) => {
   assert.equal(json.lines, 0);
   assert.ok(json.path.endsWith('.pdf'));
   assert.equal(fs.readFileSync(json.path).subarray(0, 4).toString(), '%PDF');
+  assert.ok(json.helper.endsWith('/courier-append.js'), `helper must point at courier-append.js: ${json.helper}`);
+  assert.ok(!json.helper.includes('\\'), 'helper must use forward slashes');
+  assert.ok(fs.existsSync(json.helper), 'helper must exist on disk');
 });
 
 test('charset=iso-8859-1 header: accented characters survive, no U+FFFD', async (t) => {
@@ -239,6 +248,7 @@ test('invalid URL (not a URL at all): structured FAIL, reasons ["invalid-url"] (
   const { exit, json } = await runCli(t, ['not a url']);
   assert.equal(exit, 1);
   assert.deepEqual(json.reasons, ['invalid-url']);
+  assert.equal('helper' in json, false, 'FAIL (path null) must not carry helper');
 });
 
 test('invalid URL (non-http(s) scheme): structured FAIL, reasons ["invalid-url"] (M3)', async (t) => {

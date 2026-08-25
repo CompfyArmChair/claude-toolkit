@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fetchUrl } from './src/fetch.js';
 import { extractReadable } from './src/extract.js';
 import { classify } from './src/verdict.js';
@@ -7,6 +9,12 @@ import {
   deriveSlug, resolveProjectRoot, depositDir, createDepositFile,
   renderFrontmatter, ensureGitExclude,
 } from './src/deposit.js';
+
+// The append-helper path travels in-band (plugin-move spec section 4.4): the
+// courier spawner forwards it as HELPER, so no prose file carries a machine
+// path. Forward slashes survive Git Bash quoting on Windows.
+const HELPER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'courier-append.js')
+  .split(path.sep).join('/');
 
 const EXIT = { OK: 0, FAIL: 1, ESCALATE: 2 };
 
@@ -95,7 +103,7 @@ async function main() {
   if (response.body.kind === 'pdf') {
     return writeDepositAndEmit({ dir, projectRoot, date, slug, ext: 'pdf' }, response.body.bytes, url.href,
       (depositPath, excludeFailed) => ({
-        verdict: 'OK', path: depositPath, url: url.href, finalUrl: response.finalUrl,
+        verdict: 'OK', path: depositPath, helper: HELPER, url: url.href, finalUrl: response.finalUrl,
         status: response.status, title: '', bytes: response.body.bytes.length, lines: 0,
         format: 'pdf', reasons: excludeFailed ? ['git-exclude-failed'] : [],
       }));
@@ -126,7 +134,7 @@ async function main() {
 
   return writeDepositAndEmit({ dir, projectRoot, date, slug, ext: 'md' }, contents, url.href,
     (depositPath, excludeFailed) => ({
-      verdict, path: depositPath, url: url.href, finalUrl: response.finalUrl,
+      verdict, path: depositPath, helper: HELPER, url: url.href, finalUrl: response.finalUrl,
       status: response.status, title: extracted.title,
       // lines counts newlines (the wc -l convention, M1) - not
       // split('\n').length, which is one high because contents always ends
