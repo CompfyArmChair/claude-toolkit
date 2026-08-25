@@ -1,5 +1,5 @@
 {
-  "description": "Context-window checkpoint hook — announces once per measurement identity, per event, when token usage crosses 100k / 200k / 250k / 300k. Each warning reports the crossing and its implication for reasoning quality; the ≥200k warnings additionally instruct the baseline response — wrap up and use /handover, escalating to stop-immediately at 250k/300k, with 300k noting that work quality may have been compromised (tier-specific protocol still lives in the agent manuals). Turn-end events (Stop/SubagentStop) deliver actionable (≥200k) crossings as decision:block, forcing one delivery turn (E2E F20/F22). SubagentStop measures the subagent's OWN transcript under per-agent state, so teammates are warned on their own context, not the manager's (Spike 8 facet 3).",
+  "description": "Context-window checkpoint hook — announces once per measurement identity, per event, when token usage crosses 100k / 200k / 250k / 300k. Each warning reports the crossing and its implication for reasoning quality; the ≥200k warnings additionally instruct the baseline response — wrap up and use /handover, escalating to stop-immediately at 250k/300k, with 300k noting that work quality may have been compromised (tier-specific protocol still lives in the agent manuals). Turn-end events (Stop/SubagentStop) deliver actionable (≥200k) crossings as decision:block, forcing one delivery turn (E2E F20/F22). SubagentStop measures the subagent's OWN transcript under per-agent state, so teammates are warned on their own context, not the manager's (Spike 8 facet 3). Also ships the raw-fetch pipeline hooks: PreToolUse/WebFetch — unconditional deny that teaches the pipeline (deny-webfetch.mjs); SessionStart — injects the web-research doctrine rendered from web-doctrine.md with resolved plugin paths (inject-web-doctrine.mjs).",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -40,6 +40,29 @@
           {
             "type": "command",
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/context-usage.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/deny-webfetch.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/inject-web-doctrine.mjs\"",
             "timeout": 5
           }
         ]
