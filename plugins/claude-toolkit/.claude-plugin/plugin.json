@@ -1,6 +1,6 @@
 {
   "name": "claude-toolkit",
-  "version": "1.6.1",
-  "description": "Architecture and test review agents, research agents, a 3-tier brainstorm-to-ship orchestrator (or-superpowers-at-scale), development workflow commands, MCP/skill design guides, and a context-window checkpoint hook",
+  "version": "1.7.0",
+  "description": "Architecture and test review agents, research agents, a 3-tier brainstorm-to-ship orchestrator (or-superpowers-at-scale), development workflow commands, MCP/skill design guides, a context-window checkpoint hook, and the raw-fetch web pipeline (WebFetch deny hook, fetch-page CLI, page-courier agent)",
   "author": { "name": "marti" }
 }

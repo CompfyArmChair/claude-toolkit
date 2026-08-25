@@ -10,6 +10,7 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 - **community-researcher** — Research how the community solves problems, surface trade-offs and real-world experience; saves a cited report to docs/research/ and replies with a digest plus the path
 - **dependency-researcher** — Research library/SDK documentation from multiple sources; saves a cited report to docs/research/ and replies with a digest plus the path
 - **violation-verifier** — Verify whether flagged architectural violations are real or false positives
+- **page-courier** — Tier-2 courier of the raw-fetch pipeline: fetches a page in the user's real Chrome and appends its text verbatim to the fetch-page deposit; spawned with URL / DEPOSIT / HELPER from fetch-page's JSON output
 
 **or-superpowers-at-scale orchestrator agents** (internal — spawned by the orchestrator, not for standalone use):
 - **or-brainstormer** / **or-plan-writer** — Phase-1/2 teammates the user talks to directly (idea → spec, spec → plan)
@@ -38,6 +39,24 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 
 ### Hooks
 - **context-usage** — Context-window checkpoint hook (`UserPromptSubmit`, `PostToolUse`, `Stop`, `SubagentStop`): announces once per measurement identity, per event, when token usage crosses 100k / 200k / 250k / 300k. Each warning reports the crossing and its implication for reasoning quality; the ≥200k warnings additionally instruct the baseline response — wrap up and use `/handover`, escalating to stop-immediately at 250k/300k, with 300k noting that work quality may have been compromised (tier-specific protocol still lives in the agent manuals). The informational events inject the warning as `additionalContext`; the turn-end events deliver actionable (≥200k) crossings as `decision:block`, forcing one extra turn so the warning lands — even in inbox-driven team loops where the informational events starve. `SubagentStop` measures the subagent's own transcript under per-agent state, so teammates are warned on their own context, not the parent session's. Per-identity state lives under `~/.claude/hooks/state/`.
+- **deny-webfetch** — Unconditional PreToolUse deny for WebFetch; the deny reason teaches the raw-fetch substitute with resolved, runnable plugin paths
+- **inject-web-doctrine** — SessionStart injection of the web-research doctrine, rendered from `hooks/web-doctrine.md` with resolved plugin paths
+
+### fetch-page (raw-fetch pipeline CLI)
+
+`fetch-page/` is the tier-1 fetcher of the WebFetch-ban pipeline: it GETs a
+URL, extracts readable content, writes it verbatim to a project-local
+deposit file (`<projectRoot>/.claude/web-deposits/`), and prints exactly one
+JSON line — page content never appears inline. Invoke it via the launcher:
+
+    node <plugin>/fetch-page/bin/fetch-page.js <url>
+
+**First-run behaviour:** dependencies are not bundled. On first use the
+launcher runs `npm ci` in the package directory (npm output to stderr; needs
+network + npm on PATH); if npm fails it prints a one-line
+`{"verdict":"FAIL",...,"reasons":["install:<code>"]}` and exits 1. Full
+design: `docs/superpowers/specs/2026-08-08-webfetch-ban-raw-fetch-pipeline-design.md`
+and the delta `docs/superpowers/specs/2026-08-23-pipeline-plugin-move-design.md`.
 
 ## Install
 
