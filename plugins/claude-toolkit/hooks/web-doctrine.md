@@ -15,7 +15,8 @@ Full design: {{SPEC}}
 2. **Consume:** Read or Grep the deposit file. Never expect content in the
    tool output.
 3. **Escalate:** on `verdict: ESCALATE` (bot wall, JS-only shell), spawn the
-   `page-courier` agent with three values from the JSON line - the spawn
+   `claude-toolkit:page-courier` agent (that exact subagent_type - the bare
+   name does not resolve) with three values from the JSON line - the spawn
    prompt is `URL: <url> DEPOSIT: <path> HELPER: <helper>`. It fetches via
    real Chrome and appends the page verbatim to the same file. Verdicts are
    routing advice, not gates - the courier may equally be pointed at an `OK`

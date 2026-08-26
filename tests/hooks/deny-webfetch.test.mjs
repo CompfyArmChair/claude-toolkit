@@ -27,6 +27,8 @@ test('deny-webfetch: unconditional deny whose teaching message is runnable', () 
   assert.ok(reason.includes(doctrine), 'must point at the doctrine template');
   assert.ok(fs.existsSync(launcher), 'launcher named in the message must exist');
   assert.ok(reason.includes('HELPER'), 'must teach the courier spawn contract');
+  assert.ok(reason.includes('subagent_type "claude-toolkit:page-courier"'), 'must teach the namespaced courier id - the bare name silently resolves to general-purpose');
+  assert.ok(!reason.includes('subagent_type "page-courier"'), 'bare subagent_type must not be taught');
   assert.ok(!reason.includes('~/.claude') && !reason.includes('C:/Users/marti'), 'no machine-bound paths');
   assert.ok([...reason].every((c) => c.charCodeAt(0) < 128), 'ASCII only');
 });

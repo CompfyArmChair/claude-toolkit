@@ -23,6 +23,7 @@ test('inject-web-doctrine: SessionStart additionalContext fully rendered', () =>
   assert.ok(ctx.includes(`node "${launcher}" <url>`), 'rendered launcher invocation present');
   assert.ok(!ctx.includes('{{'), 'no unrendered placeholders');
   assert.ok(ctx.includes('https://github.com/CompfyArmChair/claude-toolkit/blob/master/docs/superpowers/specs/2026-08-08-webfetch-ban-raw-fetch-pipeline-design.md'), 'spec pointer rendered');
+  assert.ok(ctx.includes('`claude-toolkit:page-courier`'), 'doctrine must teach the namespaced courier id');
   assert.ok(ctx.includes('HELPER'), 'courier spawn contract present');
   assert.ok(!ctx.includes('~/.claude') && !ctx.includes('C:/Users/marti'), 'no machine-bound paths');
 });

@@ -21,7 +21,7 @@ const reason = [
   `1. Run: node "${launcher}" <url>`,
   '   It deposits the page verbatim (extracted markdown, raw text, or raw PDF) under <projectRoot>/.claude/web-deposits/ and prints ONE JSON line {verdict, path, helper, ...}. Page content is never inlined - Read or Grep the deposit file at "path".',
   '2. verdict OK: Read/Grep the deposit.',
-  '3. verdict ESCALATE (bot wall / JS-only shell): spawn the page-courier agent (Agent tool, subagent_type "page-courier") with the URL, the deposit path, and the helper path from the JSON (spawn prompt: URL / DEPOSIT / HELPER); it fetches via real Chrome and appends the page verbatim to that same file. Verdicts are routing advice, not gates - the courier may also be used on an OK deposit that looks incomplete.',
+  '3. verdict ESCALATE (bot wall / JS-only shell): spawn the page-courier agent (Agent tool, subagent_type "claude-toolkit:page-courier" - the bare name does not resolve) with the URL, the deposit path, and the helper path from the JSON (spawn prompt: URL / DEPOSIT / HELPER); it fetches via real Chrome and appends the page verbatim to that same file. Verdicts are routing advice, not gates - the courier may also be used on an OK deposit that looks incomplete.',
   '4. verdict FAIL: report honestly that the fetch failed. Do NOT answer from memory as if the page had been fetched.',
   `Multi-page research: delegate to a subagent (model Sonnet or above) that runs fetch-page and reads deposits in its own context, citing deposit-path:line for every claim. See ${doctrine}.`,
 ].join('\n');
