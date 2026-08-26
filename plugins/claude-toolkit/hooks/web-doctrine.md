@@ -38,9 +38,9 @@ Fetching is iterative by design. Do not stop at the first page:
   site's pattern (e.g. GitHub's `/owner/repo/issues`).
 - Prefer the rawest URL that serves the same content. On GitHub, fetch file
   contents via `raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>`
-  (deposited verbatim, `format: text`) - the `/blob/` page is a JS shell
-  that will ESCALATE. This complements, not replaces, `gh` and `git`, which
-  stay first choice for GitHub work.
+  (deposited verbatim, `format: text`) - the `/blob/` page can come back OK,
+  but with the file buried in GitHub's navigation chrome. This complements,
+  not replaces, `gh` and `git`, which stay first choice for GitHub work.
 - Embedded iframes are never fetched; their `src` survives in the deposit
   (as a raw tag or embed link). If the embed matters, run fetch-page on
   that URL as its own hop.

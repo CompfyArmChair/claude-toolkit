@@ -3,7 +3,7 @@
   "owner": { "name": "marti" },
   "metadata": {
     "description": "Agents, commands, skills, and hooks for code review, research, and development workflows, plus the raw-fetch web pipeline",
-    "version": "1.7.0",
+    "version": "1.7.1",
     "pluginRoot": "./plugins"
   },
   "plugins": [
@@ -11,7 +11,7 @@
       "name": "claude-toolkit",
       "source": "./plugins/claude-toolkit",
       "description": "Architecture and test review agents, research agents, a 3-tier brainstorm-to-ship orchestrator (or-superpowers-at-scale), development workflow commands, MCP/skill design guides, a context-window checkpoint hook, and the raw-fetch web pipeline (WebFetch deny hook, fetch-page CLI, page-courier agent)",
-      "version": "1.7.0"
+      "version": "1.7.1"
     }
   ]
 }
