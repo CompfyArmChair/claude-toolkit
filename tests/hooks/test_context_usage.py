@@ -18,6 +18,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOK = REPO_ROOT / "plugins" / "claude-toolkit" / "hooks" / "context-usage.py"
 STATE_DIR = Path.home() / ".claude" / "hooks" / "state"
+HOOKS_JSON = REPO_ROOT / "plugins" / "claude-toolkit" / "hooks" / "hooks.json"
 
 
 class ContextUsageHookTests(unittest.TestCase):
@@ -51,10 +52,10 @@ class ContextUsageHookTests(unittest.TestCase):
         path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
         return path
 
-    def _agent_transcript(self, tokens, agent_id):
-        """A teammate/one-shot agent transcript: every entry isSidechain
-        (the verified on-disk shape of <session>/subagents/agent-<id>.jsonl)."""
-        entry = {
+    def _agent_entry(self, tokens, agent_id):
+        """One assistant entry as the harness writes it in an agent's own
+        transcript: isSidechain on every line (verified on-disk shape)."""
+        return {
             "type": "assistant",
             "isSidechain": True,
             "agentId": agent_id,
@@ -67,8 +68,25 @@ class ContextUsageHookTests(unittest.TestCase):
                 }
             },
         }
+
+    def _agent_transcript(self, tokens, agent_id):
+        """An agent transcript at an EXPLICIT path (what SubagentStop names in
+        agent_transcript_path)."""
         path = self.tmp_dir / f"agent-{agent_id}.jsonl"
-        path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(self._agent_entry(tokens, agent_id)) + "\n", encoding="utf-8"
+        )
+        return path
+
+    def _derived_agent_transcript(self, tokens, agent_id):
+        """The agent's own transcript where the harness puts it, relative to
+        the MAIN transcript this fixture writes at <tmp>/transcript.jsonl:
+        <tmp>/transcript/subagents/agent-<id>.jsonl (spec 5.1 rule 1, K:70-74)."""
+        path = self.tmp_dir / "transcript" / "subagents" / f"agent-{agent_id}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(self._agent_entry(tokens, agent_id)) + "\n", encoding="utf-8"
+        )
         return path
 
     def run_hook(self, event, tokens, **extra):
@@ -417,6 +435,102 @@ class ContextUsageHookTests(unittest.TestCase):
         proc = self.run_hook_proc(self._payload("Stop", transcript))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout.strip(), "")
+
+    # --- spec 5.1 rules 1-2: the hook measures whoever it is talking to.
+    # --- Every event carrying agent_id is agent-scoped: the agent's OWN
+    # --- transcript (derived beside the main one) under <session>--<agent>
+    # --- state. Never the parent's, never a fallback.
+
+    def test_tool_events_with_agent_id_measure_the_agents_own_transcript(self):
+        # Spec 8 test 1 (5.1 rule 1). Built to break the promise both ways:
+        # parent far past 200k with the agent under every threshold (a
+        # parent-scoped read announces), then the reverse (a parent-scoped
+        # read stays silent). PostToolUse and PostToolUseFailure alike.
+        for event in ("PostToolUse", "PostToolUseFailure"):
+            with self.subTest(event=event, case="parent 250k, agent 50k"):
+                agent_id = f"low{event}"
+                self._derived_agent_transcript(50_000, agent_id)
+                self.assertEqual(self.run_hook(event, 250_000, agent_id=agent_id), "")
+            with self.subTest(event=event, case="parent 50k, agent 210k"):
+                agent_id = f"high{event}"
+                self._derived_agent_transcript(210_000, agent_id)
+                out = json.loads(self.run_hook(event, 50_000, agent_id=agent_id))
+                ctx = out["hookSpecificOutput"]
+                self.assertEqual(ctx["hookEventName"], event)
+                self.assertIn("[210,000 tokens used]", ctx["additionalContext"])
+                self.assertIn("200k", ctx["additionalContext"])
+
+    def test_agent_crossing_leaves_parent_state_byte_identical(self):
+        # Spec 8 test 2 (5.1 rule 1). The parent already owns a state file
+        # (its own 100k announce), so "untouched" is byte identity, not
+        # absence. The parent sits at 110k: a mis-scoped PostToolUse would
+        # record tool=100000 there and change the bytes.
+        self.run_hook("UserPromptSubmit", 110_000)
+        parent_state = STATE_DIR / f"context-usage-{self.session_id}.json"
+        before = parent_state.read_bytes()
+        self._derived_agent_transcript(210_000, "aaa111")
+        out = self.run_hook("PostToolUse", 110_000, agent_id="aaa111")
+        self.assertIn("200k", out)
+        self.assertEqual(parent_state.read_bytes(), before)
+        agent_state = STATE_DIR / f"context-usage-{self.session_id}--aaa111.json"
+        self.assertEqual(
+            json.loads(agent_state.read_text(encoding="utf-8"))["tool"], 200_000
+        )
+
+    def test_agent_id_without_resolvable_transcript_skips_with_breadcrumb(self):
+        # Spec 8 test 4 (5.1 rule 2). No explicit field, no derived file, and
+        # the parent at 300k beside it: any fallback would announce. Expect
+        # nothing on stdout, no state file for either identity, and a stderr
+        # breadcrumb naming the agent.
+        proc = self.run_hook_proc(json.dumps({
+            "hook_event_name": "PostToolUse",
+            "session_id": self.session_id,
+            "transcript_path": str(self._transcript(300_000)),
+            "agent_id": "ghost1",
+        }))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "")
+        self.assertIn("ghost1", proc.stderr)
+        self.assertEqual(
+            list(STATE_DIR.glob(f"context-usage-{self.session_id}*.json")), []
+        )
+
+    def test_post_tool_use_and_failure_share_the_tool_key(self):
+        # Spec 8 test 6 (5.1 events). A threshold announced by one event is
+        # not re-announced by the other - both orders, both scopes, each on
+        # a fresh identity.
+        for first, second in (
+            ("PostToolUse", "PostToolUseFailure"),
+            ("PostToolUseFailure", "PostToolUse"),
+        ):
+            with self.subTest(scope="agent", first=first):
+                agent_id = f"share{first}"
+                self._derived_agent_transcript(210_000, agent_id)
+                self.assertIn("200k", self.run_hook(first, 50_000, agent_id=agent_id))
+                self._derived_agent_transcript(215_000, agent_id)
+                self.assertEqual(self.run_hook(second, 50_000, agent_id=agent_id), "")
+        with self.subTest(scope="main"):
+            self.assertIn("200k", self.run_hook("PostToolUseFailure", 210_000))
+            self.assertEqual(self.run_hook("PostToolUse", 215_000), "")
+
+    def test_hooks_json_registers_post_tool_use_failure_with_context_usage(self):
+        # Spec 8 test 10, context-usage half (5.1 events): PostToolUseFailure
+        # runs the same command with the same timeout as PostToolUse.
+        hooks = json.loads(HOOKS_JSON.read_text(encoding="utf-8"))["hooks"]
+
+        def context_usage_entries(event):
+            return [
+                h for entry in hooks.get(event, []) for h in entry["hooks"]
+                if "context-usage.py" in h["command"]
+            ]
+
+        success = context_usage_entries("PostToolUse")
+        failure = context_usage_entries("PostToolUseFailure")
+        self.assertEqual(len(success), 1)
+        self.assertEqual(len(failure), 1)
+        self.assertEqual(failure[0]["command"], success[0]["command"])
+        self.assertEqual(failure[0]["timeout"], success[0]["timeout"])
+        self.assertNotIn("PostToolBatch", hooks)
 
     # --- malformed-input hardening: graceful recovery, exit 0, one stderr
     # --- breadcrumb naming what was malformed (visible under claude --debug)

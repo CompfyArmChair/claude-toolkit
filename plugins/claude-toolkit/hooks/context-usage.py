@@ -1,30 +1,54 @@
 #!/usr/bin/env python3
-"""Context-window checkpoint hook (UserPromptSubmit, PostToolUse, Stop, SubagentStop).
+"""Context-window checkpoint hook (UserPromptSubmit, PostToolUse,
+PostToolUseFailure, Stop, SubagentStop).
 
-Reads the active transcript, computes current main-thread context usage, and
-announces a checkpoint crossing exactly once per session, per event type:
+Reads the transcript of whoever the event is talking to, computes that
+context's current usage, and announces a checkpoint crossing exactly once
+per measurement identity, per channel:
 
-  UserPromptSubmit -> informational: injects additionalContext into the
-                      assistant's view at the start of each turn
-  PostToolUse      -> informational: injects additionalContext mid-turn,
-                      immediately after the next tool call following a
-                      crossing - so the assistant can adapt mid-task
-  Stop             -> turn-end: for ACTIONABLE crossings (>= 200k) returns
-                      {"decision": "block", "reason": <context warning>},
-                      forcing exactly one more turn so the warning reaches
-                      the agent. Sub-actionable crossings never block (never
-                      force a turn for information).
-  SubagentStop     -> turn-end: same as Stop, but measured on the AGENT's
-                      own transcript (payload agent_transcript_path, alias
-                      subagent_transcript_path) under a per-agent state
-                      identity <session_id>--<agent_id>, so a teammate is
-                      blocked on ITS OWN crossing, never the manager's
-                      (Spike 8 facet 3). Agent transcripts are entirely
-                      isSidechain:true, so the sidechain filter is lifted
-                      there. A payload naming no agent transcript is
-                      skipped (stderr breadcrumb) - never measured against
-                      the parent's transcript: mis-scoped measurement is
-                      the bug this scoping fixes.
+  UserPromptSubmit   -> informational: injects additionalContext into the
+                        assistant's view at the start of each turn
+  PostToolUse        -> informational: injects additionalContext mid-turn,
+  PostToolUseFailure    immediately after the next tool call - succeeded
+                        or failed - following a crossing, so the assistant
+                        can adapt mid-task. The two events share one state
+                        key ("tool"): one announcement per threshold,
+                        whichever lands first. PostToolUse fires only after
+                        a tool call succeeds; a failed call fires
+                        PostToolUseFailure (K:50-57).
+  Stop               -> turn-end: for ACTIONABLE crossings (>= 200k) returns
+                        {"decision": "block", "reason": <context warning>},
+                        forcing exactly one more turn so the warning reaches
+                        the agent. Sub-actionable crossings never block (never
+                        force a turn for information).
+  SubagentStop       -> turn-end: same as Stop, measured on the agent's own
+                        transcript like every other agent-scoped event.
+
+Scope resolution (2026-09-11; extends the SubagentStop-only agent scoping
+of 2026-06-06 to every event): the hook measures the context of whoever it
+is talking to. On Claude Code 2.1.269 every event fired inside a subagent
+carries agent_id and agent_type while transcript_path names the MAIN
+session's transcript (docs/research/2026-09-11-spike-posttooluse-subagent-
+context.md, K:68-71). Rules, in order:
+
+  1. A payload carrying a string agent_id - or an explicit agent-transcript
+     field - is AGENT-SCOPED. The transcript is agent_transcript_path
+     (docs alias subagent_transcript_path) when present, else the derived
+     path
+       Path(transcript_path).with_suffix("") / "subagents"
+                                            / f"agent-{agent_id}.jsonl"
+     which is where the harness writes the agent's own transcript. The
+     state identity is <session_id>--<agent_id> (agent_id falls back to
+     the explicit transcript's stem). Agent transcripts are entirely
+     isSidechain:true, so sidechain entries count there.
+  2. Agent-scoped but no candidate transcript exists on disk: skip with a
+     stderr breadcrumb. NEVER fall back to the parent's transcript -
+     mis-scoped measurement is the bug this rule exists to prevent.
+  3. Otherwise the event is MAIN-SCOPED: measure transcript_path under
+     session_id, excluding sidechain entries (guards against the
+     historical inline-sidechain format).
+  4. SubagentStop naming no agent identity at all keeps its skip (with a
+     breadcrumb), never the parent's transcript.
 
 Advisory plus instruction (design change 2026-07-21, reversing the earlier
 sensor-only stance): every message reports the figure, the threshold, and
@@ -32,9 +56,9 @@ the resulting implication for reasoning quality; the ACTIONABLE (>= 200k)
 messages additionally carry the baseline instruction - wrap up and use
 /handover - escalating to "stop immediately" at 250k/300k, and at 300k
 noting that work quality may have been compromised. The sub-actionable
-100k checkpoint stays advisory-only. Tier-specific protocol detail (e.g.
-the or-* tiers' handover choreography, F10) still lives in the agent
-manuals; the hook's instruction is the baseline, not the full protocol.
+100k checkpoint stays advisory-only. Tier-specific protocol detail lives
+in the agent definition's own protocol; the hook's instruction is the
+baseline, not the full protocol.
 
 Why turn-end events (E2E findings F20/F22): in inbox-driven team loops both
 UserPromptSubmit and PostToolUse are starved - teammate-inbox deliveries
@@ -62,24 +86,14 @@ State files (one JSON per measurement identity):
   per agent:  ~/.claude/hooks/state/
               context-usage-<session_id>--<agent_id>.json
   Shape: {"prompt": <t>, "tool": <t>, "stop": <t>, "subagent_stop": <t>}
-  (an agent file only ever accrues "subagent_stop" in practice). Files
-  appear only on a first actionable crossing, so accumulation is bounded
-  to agents that actually cross.
+  Files appear only on a first crossing, so accumulation is bounded to
+  identities that actually cross.
   Legacy field "last_announced" migrates to "prompt" on first read.
 
 Reset: if current usage falls below 50% of any previously announced threshold
 (e.g. after /compact or /rewind), all tracked thresholds reset - and the
 reset is persisted immediately, so turn-end detection (which announces
 nothing below 200k that could piggyback persistence) re-arms too.
-
-Accepted residual (teammate-scoped design, 2026-06-06): teammate-originated
-PostToolUse - and user prompts typed in a teammate's pane (UserPromptSubmit)
-- carry no agent identifier (binary-verified), so the informational paths
-remain parent-scoped: a teammate may see mid-turn announces describing the
-MANAGER's context, and such a crossing consumes the parent's prompt/tool
-once-per-threshold keys (possibly suppressing one manager informational
-announce). The authoritative per-agent signal is the turn-end SubagentStop
-block above, which IS agent-scoped.
 
 Accepted residual (per-wake re-warning, Spike 9 2026-06-06): the harness
 assigns every teammate WAKE a fresh agent_id and a fresh wake transcript,
@@ -90,6 +104,12 @@ semantics that is "one warning per wake while over-threshold" - accepted
 delivery behavior, not a defect. Cross-wake identity engineering (payload
 introspection for a wake-stable key, transcript lineage) was considered
 and rejected as over-engineering.
+
+Accepted residual (duplicate announce under parallel tool calls): PostToolUse
+runs concurrently per tool inside a parallel batch (R:30), so two tool
+events of one identity can both read the pre-announce state and both
+announce the same threshold once. Harmless: a repeated warning, never a
+missed one.
 
 Malformed input (non-dict state file / stdin payload / transcript entry,
 non-numeric usage field, non-string payload string-field) degrades
@@ -104,6 +124,7 @@ firing again - is exactly the starvation this hook exists to fix (F20/F22).
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # Informational wording (additionalContext on UserPromptSubmit/PostToolUse).
@@ -184,8 +205,12 @@ STATE_DIR = Path.home() / ".claude" / "hooks" / "state"
 SAFE_ID = re.compile(r"[^A-Za-z0-9_.-]")
 RESET_RATIO = 0.5
 
+SCOPE_MAIN = "main"
+SCOPE_AGENT = "agent"
+
 EVENT_PROMPT = "UserPromptSubmit"
 EVENT_TOOL = "PostToolUse"
+EVENT_TOOL_FAILURE = "PostToolUseFailure"
 EVENT_STOP = "Stop"
 EVENT_SUBAGENT_STOP = "SubagentStop"
 TURN_END_EVENTS = (EVENT_STOP, EVENT_SUBAGENT_STOP)
@@ -201,9 +226,14 @@ STATE_KEYS = (
     STATE_KEY_SUBAGENT_STOP,
 )
 
+# PostToolUse and PostToolUseFailure share one key: one mid-turn announcement
+# per threshold, whichever event lands first (a failed tool call fires only
+# PostToolUseFailure - the depth-1 probe missed three failed Reads for exactly
+# this reason, K:50-57).
 EVENT_STATE_KEYS = {
     EVENT_PROMPT: STATE_KEY_PROMPT,
     EVENT_TOOL: STATE_KEY_TOOL,
+    EVENT_TOOL_FAILURE: STATE_KEY_TOOL,
     EVENT_STOP: STATE_KEY_STOP,
     EVENT_SUBAGENT_STOP: STATE_KEY_SUBAGENT_STOP,
 }
@@ -287,46 +317,82 @@ def emit_for(event_name: str, message: str) -> str:
     })
 
 
-def measurement_target(payload: dict, event_name: str) -> tuple[str, str, bool] | None:
-    """Resolve whose context this event measures: (transcript path, state
-    identity, include_sidechain). Payload fields are read via str_field:
-    a non-string value is malformed input, warned and treated as absent.
+@dataclass(frozen=True)
+class Target:
+    """Whose context this event measures."""
 
-    Main-loop events (UserPromptSubmit/PostToolUse/Stop) measure the
-    session's main transcript under the session_id, excluding sidechain
-    entries (guards against the historical inline-sidechain format).
+    transcript: Path
+    state_id: str
+    scope: str  # SCOPE_MAIN or SCOPE_AGENT
 
-    SubagentStop measures the AGENT's own transcript under a per-agent
-    identity (Spike 8 facet 3: the payload's transcript_path is the
-    PARENT's, and the parent session_id would pool every agent's
-    once-per-threshold state together). Agent transcripts are entirely
-    isSidechain:true, so sidechain entries count there. The installed
-    binary names the field agent_transcript_path; the docs say
-    subagent_transcript_path - accept both, binary's name first.
+    @property
+    def include_sidechain(self) -> bool:
+        # Agent transcripts are wholly isSidechain:true, so the filter would
+        # blind the read there; main transcripts keep excluding sidechain
+        # entries (historical inline-sidechain format).
+        return self.scope == SCOPE_AGENT
 
-    Returns None when no measurable transcript is named. A SubagentStop
-    payload without an agent-transcript field is skipped with a stderr
-    breadcrumb - NEVER measured against the parent's transcript_path,
-    because mis-scoped measurement is the very bug this resolution fixes.
+
+def derived_agent_transcript(transcript_path: str, agent_id: str) -> Path:
+    """The agent's own transcript as the harness lays it out on disk
+    (verified on 2.1.269, K:70-74): <main transcript stem>/subagents/agent-<id>.jsonl."""
+    return (
+        Path(transcript_path).with_suffix("") / "subagents" / f"agent-{agent_id}.jsonl"
+    )
+
+
+def measurement_target(payload: dict, event_name: str) -> Target | None:
+    """Resolve whose context this event measures (spec 5.1 rules 1-4).
+
+    Agent-scoped when the payload carries a string agent_id or an explicit
+    agent-transcript field (agent_transcript_path; docs alias
+    subagent_transcript_path). The transcript is the explicit field when
+    present, else the derived path; the first candidate that exists wins.
+    The state identity is <session_id>--<agent_id>, agent_id falling back
+    to the explicit transcript's stem. No candidate on disk: skip with a
+    breadcrumb and NEVER measure the parent's transcript_path - mis-scoped
+    measurement is the bug this resolution exists to prevent.
+
+    Main-scoped otherwise: transcript_path under session_id. SubagentStop
+    naming no agent identity at all keeps its skip.
+
+    Payload fields are read via str_field: a non-string value is malformed
+    input, warned and treated as absent.
     """
     session_id = str_field(payload, "session_id") or "default"
-    if event_name != EVENT_SUBAGENT_STOP:
-        transcript_path = str_field(payload, "transcript_path")
-        if not transcript_path:
-            return None
-        return transcript_path, session_id, False
-    transcript_path = str_field(payload, "agent_transcript_path") or str_field(
+    agent_id = str_field(payload, "agent_id")
+    explicit = str_field(payload, "agent_transcript_path") or str_field(
         payload, "subagent_transcript_path"
     )
-    if not transcript_path:
-        warn(
-            "SubagentStop payload missing agent_transcript_path/"
-            "subagent_transcript_path - skipping (cannot measure the "
-            "agent's own context)"
-        )
-        return None
-    agent_id = str_field(payload, "agent_id") or Path(transcript_path).stem
-    return transcript_path, f"{session_id}--{agent_id}", True
+    transcript_path = str_field(payload, "transcript_path")
+
+    if agent_id is None and explicit is None:
+        if event_name == EVENT_SUBAGENT_STOP:
+            warn(
+                "SubagentStop payload missing agent_id and agent_transcript_path/"
+                "subagent_transcript_path - skipping (cannot measure the "
+                "agent's own context)"
+            )
+            return None
+        if not transcript_path:
+            return None
+        return Target(Path(transcript_path), session_id, SCOPE_MAIN)
+
+    candidates: list[Path] = []
+    if explicit:
+        candidates.append(Path(explicit))
+    if agent_id and transcript_path:
+        candidates.append(derived_agent_transcript(transcript_path, agent_id))
+    identity = agent_id or Path(explicit).stem
+    for candidate in candidates:
+        if candidate.exists():
+            return Target(candidate, f"{session_id}--{identity}", SCOPE_AGENT)
+    looked_at = " or ".join(str(c) for c in candidates) or "<no candidate path>"
+    warn(
+        f"agent-scoped {event_name} for agent {identity!r}: no transcript at "
+        f"{looked_at} - skipping (never measuring the parent transcript)"
+    )
+    return None
 
 
 def latest_main_thread_usage(
@@ -399,17 +465,17 @@ def main() -> int:
     target = measurement_target(payload, event_name)
     if target is None:
         return 0
-    transcript_path, state_id, include_sidechain = target
-    p = Path(transcript_path)
-    if not p.exists():
+    if not target.transcript.exists():
         return 0
 
-    usage = latest_main_thread_usage(p, include_sidechain=include_sidechain)
+    usage = latest_main_thread_usage(
+        target.transcript, include_sidechain=target.include_sidechain
+    )
     if not usage:
         return 0
 
     current = total_tokens(usage)
-    state = load_state(state_id)
+    state = load_state(target.state_id)
 
     # Reset on significant backwards jump (compact, rewind, fresh transcript).
     # Persist immediately: the turn-end path announces nothing below 200k, so
@@ -418,7 +484,7 @@ def main() -> int:
     if max_tracked > 0 and current < max_tracked * RESET_RATIO:
         for k in STATE_KEYS:
             state[k] = 0
-        save_state(state_id, state)
+        save_state(target.state_id, state)
 
     key = EVENT_STATE_KEYS.get(event_name, STATE_KEY_PROMPT)
     checkpoints = ACTIONABLE_CHECKPOINTS if turn_end else CHECKPOINTS
@@ -428,7 +494,7 @@ def main() -> int:
     threshold, message = crossing
 
     state[key] = threshold
-    save_state(state_id, state)
+    save_state(target.state_id, state)
 
     full_msg = f"[{current:,} tokens used] {message}"
     if turn_end:
