@@ -577,7 +577,10 @@ class ContextUsageHookTests(unittest.TestCase):
 
     def test_agent_scoped_100k_stays_advisory_only(self):
         # Spec 5.1 wording: the sub-actionable checkpoint carries no
-        # instruction in either scope.
+        # instruction in either scope. Regression pin (green before and
+        # after this change): red evidence came from temporarily adding a
+        # 100k entry to INSTRUCTIONS[SCOPE_AGENT], not from a code path
+        # exercised by default.
         self._derived_agent_transcript(110_000, "adv111")
         out = json.loads(self.run_hook("PostToolUse", 50_000, agent_id="adv111"))
         ctx = out["hookSpecificOutput"]["additionalContext"]
