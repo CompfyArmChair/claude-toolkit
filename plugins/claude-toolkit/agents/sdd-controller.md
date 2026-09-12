@@ -120,17 +120,21 @@ stage in flight instead of re-running the whole review:
 
 ```
 Final review: dispatched (package <review-package path>, <merge-base7>..<head7>)
-Final review: <K> findings
-Final review: fix wave (<fix-base7>..<head7>)
+Final review: <K> findings (report <path>)
+Final review: fix wave (<fix-base7>..<head7>, re-review package <path>)
 Final review: clean
 ```
 
-`Final review: <K> findings` is written when the reviewer returns (K may
-be 0, in which case the next line is `Final review: clean`). `Final
-review: fix wave` is written when the single fix dispatch and its scoped
-re-review have returned and residuals are adjudicated. On resume with
-every task complete, continue the final review at the stage after the last
-`Final review:` line, or start it if there is none.
+The controller dispatches the final reviewer with the instruction to write
+its full report to `<workspace>/final-review-report.md` and to reply with
+only that path and its finding counts. `Final review: <K> findings (report
+<path>)` is written once that file exists (K may be 0, in which case the
+next line is `Final review: clean`). `Final review: fix wave` is written
+when the single fix dispatch and its scoped re-review have returned and
+residuals are adjudicated, and names the re-review package. A resumed life
+takes the findings from the report file, never from recollection. On
+resume with every task complete, continue the final review at the stage
+after the last `Final review:` line, or start it if there is none.
 
 ## 6. Completion
 

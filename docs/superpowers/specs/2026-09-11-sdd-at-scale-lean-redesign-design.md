@@ -270,11 +270,18 @@ Body, in this order:
    `RULING`, append `Ruling (human): <question> -> <answer>` to the
    ledger before acting, so a later life keeps it, then continue.
 5. **Final-review ledgering.** Append `Final review: dispatched (package
-   <path>, <base7>..<head7>)`, `Final review: <K> findings`, `Final review:
-   fix wave (<base7>..<head7>)`, and `Final review: clean` as each stage
-   completes. On resume with every task complete, continue the final
-   review at the stage after the last `Final review:` line, or start it if
-   there is none.
+   <path>, <base7>..<head7>)`. The controller dispatches the final
+   reviewer with the instruction to write its full report to
+   `<workspace>/final-review-report.md` and to reply with only that path
+   and its finding counts; once that file exists, append `Final review:
+   <K> findings (report <path>)` (K may be 0, in which case the next line
+   is `Final review: clean`). Append `Final review: fix wave (<base7>..
+   <head7>, re-review package <path>)` when the single fix dispatch and
+   its scoped re-review have returned and residuals are adjudicated, then
+   `Final review: clean`. A resumed life takes the findings from the
+   report file, never from recollection. On resume with every task
+   complete, continue the final review at the stage after the last
+   `Final review:` line, or start it if there is none.
 6. **Completion.** Compile the post-implementation report (section 5.5)
    from the ledger, `git log` and the workspace's review packages - never
    from recollection, since earlier lives are gone - then follow SDD
@@ -442,7 +449,8 @@ guard (5.3) enforces the grammar with one forced retry.
   hold the last boundary; the next life resumes from there, at worst
   re-running one in-flight step, which SDD's review loop tolerates.
 - Session dies: `/implement-from-plan` again from the same repository
-  root reads the run record and spawns a fresh life.
+  root reads the run record and spawns a fresh life. When ROOT is a
+  worktree, the driver re-enters it before that spawn.
 - Worker dispatched by the controller crosses its own 200k: the hook now
   warns it too (5.1 applies to every agent); SDD's per-task escalation
   rules govern what the controller does with a worker that stops early.

@@ -2012,6 +2012,12 @@ Setup: `cd $SPIKE/repo && git checkout -q main && git branch -q -D spike-run-1; 
 2. `/clear`, then `/implement-from-plan C:/Users/marti/AppData/Local/Temp/sdd-spike/repo/docs/plans/spike-plan.md` (no pointer, no record; decline the worktree again).
 3. PASS when life 1 of the controller dispatches Task 2 first (`ls .superpowers/sdd/spike-plan/` shows a Task-2 brief and no new Task-1 brief), `grep -c "^Task 1: complete"` stays `1`, and the run proceeds to the STOPPED / RULING / COMPLETE sequence as in Spike D.
 
+### G. Spike G: a worktree run resumes after session death (spec 7, 5.4 Step 1 item 2)
+
+Setup: as Spike D, but accept the worktree when the driver offers it in Step 2. After life 1 pauses or stops, end the session and start a fresh one in `$SPIKE/repo` (the launch directory, not the worktree). Run `/implement-from-plan` with no argument.
+
+PASS when the driver finds the run record, re-enters the worktree (`git rev-parse --show-toplevel` in the session equals ROOT), and life 2 resumes from the ledger - never `STOPPED: preflight - repository root is ...`.
+
 ### F. Wrap-up
 
 - Record PASS/FAIL per spike with the evidence paths in the handover memory.

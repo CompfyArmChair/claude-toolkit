@@ -51,7 +51,12 @@ Resolution order:
    plan.
 2. **The run record**, when present: PLAN and ROOT come from it; skip to
    Step 3 with no new worktree work. Any controller from a dead session is
-   abandoned; the ledger is the resume point.
+   abandoned; the ledger is the resume point. Before Step 3, check
+   `git rev-parse --show-toplevel` against ROOT. If they differ, the run
+   lives in a worktree and this session started elsewhere: re-enter that
+   worktree with your native worktree tool (`EnterWorktree` with
+   `path: <ROOT>`), then re-check. Without such a tool, tell your human
+   partner to restart the session in ROOT and stop.
 3. **The plan pointer**, when present.
 4. Otherwise ask: "No plan tracked. What's the path to your plan?"
 
@@ -76,7 +81,7 @@ PLAN absolute under ROOT (a pointer holds a repo-relative path:
 run record:
 
 ```bash
-python -c "import json,sys; json.dump({'plan': sys.argv[1], 'root': sys.argv[2]}, open(sys.argv[3], 'w'))" "$PLAN" "$ROOT" "$INVOKE_ROOT/.claude/sdd-run.json"
+python -c "import json,os,sys; os.makedirs(os.path.dirname(sys.argv[3]), exist_ok=True); json.dump({'plan': sys.argv[1], 'root': sys.argv[2]}, open(sys.argv[3], 'w'))" "$PLAN" "$ROOT" "$INVOKE_ROOT/.claude/sdd-run.json"
 ```
 
 ## Step 3: Spawn a controller life
@@ -133,9 +138,9 @@ SendMessage(to: <the agent id from Step 3>, message: "RULING: <the answer>")
 
 then end your turn and wait for its next notification. If the session
 that spawned the controller is gone (no id in context), the answer cannot
-be relayed: tell your human partner, then treat the run as paused - go to
-Step 3 and pass the ruling as a third prompt line `RULING: <answer>` only
-if they confirm; otherwise leave the record in place for a later resume.
+be relayed: tell your human partner, then go to Step 3 with the same PLAN
+and ROOT. The fresh life resumes from the ledger and re-raises the
+question when it reaches the stop case, and you then hold its id.
 
 **`COMPLETE`** followed by the report - final review clean, workspace
 deleted. Present the report verbatim, then go to Step 5.
@@ -161,9 +166,10 @@ Announce: "Implementation complete. Run record and plan pointer cleared."
 ## Failure handling
 
 - The session dies mid-run: run `/implement-from-plan` again from
-  INVOKE_ROOT. Step 1 finds the run record and Step 3 spawns a fresh life;
-  the ledger and git hold the last boundary, at worst one in-flight step is
-  re-run, which SDD's review loop tolerates.
+  INVOKE_ROOT. Step 1 finds the run record and Step 3 spawns a fresh life
+  (a worktree ROOT is re-entered first - Step 1 item 2); the ledger and
+  git hold the last boundary, at worst one in-flight step is re-run, which
+  SDD's review loop tolerates.
 - Two PAUSED lives with the same ledger last line: Step 4's liveness check
   stops you; ask, do not respawn.
 - A controller reply with no status keyword after the guard's one forced
