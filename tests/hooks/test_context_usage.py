@@ -190,6 +190,8 @@ class ContextUsageHookTests(unittest.TestCase):
         # that work quality may have been compromised. Vague deferral
         # ("operating instructions") stays banned. Escalation walks all
         # three actionable tiers in one session.
+        # Spec 5.1 wording: main-scoped 200k+ messages always say /handover
+        # and never name a pause protocol.
         reasons = {}
         for tokens, tier in (
             (210_000, "200k"),
@@ -203,6 +205,7 @@ class ContextUsageHookTests(unittest.TestCase):
                 self.assertIn("reasoning", reason.lower())    # advisory kept
                 self.assertIn("wrap up", reason.lower())      # instruction
                 self.assertIn("/handover", reason)
+                self.assertNotIn("pause protocol", reason)   # main scope never names it
                 self.assertNotIn("operating instructions", reason.lower())
         self.assertNotIn("stop immediately", reasons["200k"].lower())
         self.assertIn("stop immediately", reasons["250k"].lower())
@@ -377,6 +380,8 @@ class ContextUsageHookTests(unittest.TestCase):
         # implication AND instruct wrap-up + /handover, with the same
         # escalation as the turn-end path (250k/300k stop immediately,
         # 300k notes possible quality compromise).
+        # Spec 5.1 wording: main-scoped 200k+ messages always say /handover
+        # and never name a pause protocol.
         contexts = {}
         for tokens, tier in (
             (210_000, "200k"),
@@ -391,6 +396,7 @@ class ContextUsageHookTests(unittest.TestCase):
                 self.assertIn("reasoning", ctx.lower())       # advisory kept
                 self.assertIn("wrap up", ctx.lower())         # instruction
                 self.assertIn("/handover", ctx)
+                self.assertNotIn("pause protocol", ctx)   # main scope never names it
                 self.assertNotIn("operating instructions", ctx.lower())
         self.assertNotIn("stop immediately", contexts["200k"].lower())
         self.assertIn("stop immediately", contexts["250k"].lower())
@@ -531,6 +537,53 @@ class ContextUsageHookTests(unittest.TestCase):
         self.assertEqual(failure[0]["command"], success[0]["command"])
         self.assertEqual(failure[0]["timeout"], success[0]["timeout"])
         self.assertNotIn("PostToolBatch", hooks)
+
+    # --- spec 5.1 wording: the instruction suffix is chosen by scope. Agent
+    # --- scope names the pause protocol and never /handover; main scope
+    # --- keeps /handover and never mentions a pause protocol.
+
+    def test_agent_scoped_warnings_instruct_the_pause_protocol_never_handover(self):
+        # Spec 8 test 5. Both channels (mid-turn additionalContext and the
+        # turn-end block), all three actionable tiers, walked in escalation
+        # on one identity per channel.
+        for channel in ("PostToolUse", "SubagentStop"):
+            agent_id = f"word{channel}"
+            messages = {}
+            for tokens, tier in ((210_000, "200k"), (260_000, "250k"), (310_000, "300k")):
+                self._derived_agent_transcript(tokens, agent_id)
+                out = json.loads(self.run_hook(channel, 50_000, agent_id=agent_id))
+                messages[tier] = (
+                    out["reason"] if channel == "SubagentStop"
+                    else out["hookSpecificOutput"]["additionalContext"]
+                )
+            for tier, text in messages.items():
+                with self.subTest(channel=channel, tier=tier):
+                    self.assertIn(tier, text)
+                    self.assertIn("reasoning", text.lower())      # advisory kept
+                    self.assertIn("per your pause protocol", text)  # instruction
+                    self.assertIn("record your state", text)
+                    self.assertNotIn("/handover", text)
+                    self.assertNotIn("operating instructions", text.lower())
+            with self.subTest(channel=channel, tier="escalation"):
+                self.assertNotIn("stop immediately", messages["200k"].lower())
+                self.assertIn("stop immediately", messages["250k"].lower())
+                self.assertIn("stop immediately", messages["300k"].lower())
+                self.assertNotIn("compromised", messages["200k"].lower())
+                self.assertNotIn("compromised", messages["250k"].lower())
+                self.assertIn("compromised", messages["300k"].lower())
+            if channel == "SubagentStop":
+                for text in messages.values():
+                    self.assertIn("forced", text)  # turn-end note kept
+
+    def test_agent_scoped_100k_stays_advisory_only(self):
+        # Spec 5.1 wording: the sub-actionable checkpoint carries no
+        # instruction in either scope.
+        self._derived_agent_transcript(110_000, "adv111")
+        out = json.loads(self.run_hook("PostToolUse", 50_000, agent_id="adv111"))
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("100k", ctx)
+        self.assertNotIn("pause protocol", ctx)
+        self.assertNotIn("/handover", ctx)
 
     # --- malformed-input hardening: graceful recovery, exit 0, one stderr
     # --- breadcrumb naming what was malformed (visible under claude --debug)

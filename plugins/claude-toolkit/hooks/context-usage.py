@@ -50,15 +50,22 @@ context.md, K:68-71). Rules, in order:
   4. SubagentStop naming no agent identity at all keeps its skip (with a
      breadcrumb), never the parent's transcript.
 
-Advisory plus instruction (design change 2026-07-21, reversing the earlier
-sensor-only stance): every message reports the figure, the threshold, and
-the resulting implication for reasoning quality; the ACTIONABLE (>= 200k)
-messages additionally carry the baseline instruction - wrap up and use
-/handover - escalating to "stop immediately" at 250k/300k, and at 300k
-noting that work quality may have been compromised. The sub-actionable
-100k checkpoint stays advisory-only. Tier-specific protocol detail lives
-in the agent definition's own protocol; the hook's instruction is the
-baseline, not the full protocol.
+Advisory plus instruction (2026-07-21; scope-aware since 2026-09-11):
+every message reports the figure, the threshold, and the resulting
+implication for reasoning quality; the ACTIONABLE (>= 200k) messages
+additionally carry the baseline instruction, chosen by scope because the
+hook knows whose context it measured and no agent should have to
+translate "/handover":
+  main scope  - wrap up and use /handover to continue in a fresh session
+  agent scope - finish the step you are in, record your state, and end
+                your turn per your pause protocol so a fresh agent can
+                continue
+escalating to "stop immediately" at 250k/300k, and at 300k noting that
+work quality may have been compromised. Agent-scoped messages never
+contain "/handover"; main-scoped actionable messages always do. The
+sub-actionable 100k checkpoint stays advisory-only in both scopes. What
+"pause protocol" means lives in the agent definition's own protocol; the
+hook's instruction is the baseline, not the full protocol.
 
 Why turn-end events (E2E findings F20/F22): in inbox-driven team loops both
 UserPromptSubmit and PostToolUse are starved - teammate-inbox deliveries
@@ -75,9 +82,11 @@ once-per-threshold state prevents re-announcing the same threshold.
 
 Checkpoints (cumulative tokens):
   100,000  - informational only. Left the 0-100k prime-thinking zone.
-  200,000  - ACTIONABLE: also delivered via the turn-end block. Instructs:
-             wrap up and use /handover.
-  250,000  - ACTIONABLE: instructs: stop immediately, wrap up, /handover.
+  200,000  - ACTIONABLE: also delivered via the turn-end block. Instructs
+             the scope's baseline (main: wrap up + /handover; agent:
+             finish the step, record state, end the turn per the pause
+             protocol).
+  250,000  - ACTIONABLE: as 200k, prefixed "stop immediately".
   300,000  - ACTIONABLE: as 250k, plus note that work quality may have
              been compromised.
 
@@ -127,86 +136,102 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-# Informational wording (additionalContext on UserPromptSubmit/PostToolUse).
-# Each message reports the figure, the threshold, and the resulting
-# implication for reasoning quality; the >=200k messages then instruct the
-# baseline response (wrap up + /handover, escalating per tier). 100k stays
-# advisory-only. Tier-specific protocol detail (or-* manuals, F10) is not
-# duplicated here.
-CHECKPOINTS = [
-    (
-        100_000,
-        "Context checkpoint 100k crossed. The first 100k tokens - the "
-        "highest-quality reasoning zone - are consumed.",
-    ),
-    (
-        200_000,
-        "Context checkpoint 200k crossed. You are well past the peak-quality "
-        "reasoning zone - recall of earlier context is less reliable and "
-        "multi-step reasoning is more error-prone than at the start. "
-        "Wrap up your current work and use /handover to continue in a "
-        "fresh session.",
-    ),
-    (
-        250_000,
-        "Context checkpoint 250k crossed. Reasoning quality is significantly "
-        "degraded - earlier context is increasingly likely to be missed, "
-        "misremembered, or contradicted. Stop immediately: wrap up and use "
-        "/handover to continue in a fresh session.",
-    ),
-    (
-        300_000,
-        "Context checkpoint 300k crossed. Reasoning quality is severely "
-        "degraded - expect dropped context, overlooked instructions, and "
-        "inconsistent output. Stop immediately: wrap up and use /handover "
-        "to continue in a fresh session, noting in the handover that work "
-        "quality may have been compromised.",
-    ),
-]
+SCOPE_MAIN = "main"
+SCOPE_AGENT = "agent"
 
-# Turn-end wording (decision:block on Stop/SubagentStop). The block is a
-# DELIVERY channel, not enforcement: in inbox-driven loops only turn-end
-# events fire reliably (F20/F22), and additionalContext is discarded there,
-# so forcing one extra turn is the only way the warning reaches the agent.
-# The message reports the implication for reasoning quality, explains the
-# forced turn mechanically, then instructs the baseline response (wrap up +
-# /handover, escalating per tier). 100k is deliberately absent: never force
-# a turn for a sub-actionable checkpoint.
-ACTIONABLE_CHECKPOINTS = [
-    (
-        200_000,
-        "Context checkpoint 200k crossed (turn-end detection). You are well "
-        "past the peak-quality reasoning zone - recall of earlier context is "
-        "less reliable and multi-step reasoning is more error-prone than at "
-        "the start. This turn was forced so the warning could reach you. "
-        "Wrap up your current work and use /handover to continue in a "
-        "fresh session.",
+# Message composition. Every checkpoint message is: advisory (figure is
+# prepended by main(); then "Context checkpoint <label> crossed" and the
+# implication for reasoning quality), the turn-end note when the message
+# is delivered by a forced turn, then the instruction chosen by SCOPE - the
+# hook knows whose context it measured, and no agent should have to
+# translate "/handover" into its own pause protocol. 100k carries no
+# instruction in either scope: it is context, not a directive.
+CHECKPOINTS = (100_000, 200_000, 250_000, 300_000)
+# >=200k: the instruction is carried, and turn-end events may block. 100k is
+# deliberately absent: never force a turn for a sub-actionable checkpoint.
+ACTIONABLE_CHECKPOINTS = (200_000, 250_000, 300_000)
+
+LABELS = {100_000: "100k", 200_000: "200k", 250_000: "250k", 300_000: "300k"}
+
+IMPLICATIONS = {
+    100_000: (
+        "The first 100k tokens - the highest-quality reasoning zone - are "
+        "consumed."
     ),
-    (
-        250_000,
-        "Context checkpoint 250k crossed (turn-end detection). Reasoning "
-        "quality is significantly degraded - earlier context is increasingly "
-        "likely to be missed, misremembered, or contradicted. This turn was "
-        "forced so the warning could reach you. Stop immediately: wrap up "
-        "and use /handover to continue in a fresh session.",
+    200_000: (
+        "You are well past the peak-quality reasoning zone - recall of "
+        "earlier context is less reliable and multi-step reasoning is more "
+        "error-prone than at the start."
     ),
-    (
-        300_000,
-        "Context checkpoint 300k crossed (turn-end detection). Reasoning "
-        "quality is severely degraded - expect dropped context, overlooked "
-        "instructions, and inconsistent output. This turn was forced so the "
-        "warning could reach you. Stop immediately: wrap up and use "
-        "/handover to continue in a fresh session, noting in the handover "
-        "that work quality may have been compromised.",
+    250_000: (
+        "Reasoning quality is significantly degraded - earlier context is "
+        "increasingly likely to be missed, misremembered, or contradicted."
     ),
-]
+    300_000: (
+        "Reasoning quality is severely degraded - expect dropped context, "
+        "overlooked instructions, and inconsistent output."
+    ),
+}
+
+INSTRUCTIONS = {
+    SCOPE_MAIN: {
+        200_000: (
+            "Wrap up your current work and use /handover to continue in a "
+            "fresh session."
+        ),
+        250_000: (
+            "Stop immediately: wrap up and use /handover to continue in a "
+            "fresh session."
+        ),
+        300_000: (
+            "Stop immediately: wrap up and use /handover to continue in a "
+            "fresh session, noting in the handover that work quality may "
+            "have been compromised."
+        ),
+    },
+    SCOPE_AGENT: {
+        200_000: (
+            "Finish the step you are in, record your state, and end your "
+            "turn per your pause protocol so a fresh agent can continue."
+        ),
+        250_000: (
+            "Stop immediately: finish the step you are in, record your "
+            "state, and end your turn per your pause protocol so a fresh "
+            "agent can continue."
+        ),
+        300_000: (
+            "Stop immediately: finish the step you are in, record your "
+            "state, and end your turn per your pause protocol so a fresh "
+            "agent can continue, noting in your recorded state that work "
+            "quality may have been compromised."
+        ),
+    },
+}
+
+# Turn-end delivery (decision:block on Stop/SubagentStop) explains the
+# forced turn mechanically. The block is a DELIVERY channel, not
+# enforcement: in inbox-driven loops only turn-end events fire reliably
+# (F20/F22), and additionalContext is discarded there.
+TURN_END_NOTE = "This turn was forced so the warning could reach you."
+
+
+def checkpoint_message(threshold: int, scope: str, turn_end: bool) -> str:
+    detection = " (turn-end detection)" if turn_end else ""
+    parts = [
+        f"Context checkpoint {LABELS[threshold]} crossed{detection}. "
+        f"{IMPLICATIONS[threshold]}"
+    ]
+    if turn_end:
+        parts.append(TURN_END_NOTE)
+    instruction = INSTRUCTIONS[scope].get(threshold)
+    if instruction:
+        parts.append(instruction)
+    return " ".join(parts)
+
 
 STATE_DIR = Path.home() / ".claude" / "hooks" / "state"
 SAFE_ID = re.compile(r"[^A-Za-z0-9_.-]")
 RESET_RATIO = 0.5
-
-SCOPE_MAIN = "main"
-SCOPE_AGENT = "agent"
 
 EVENT_PROMPT = "UserPromptSubmit"
 EVENT_TOOL = "PostToolUse"
@@ -432,16 +457,14 @@ def latest_main_thread_usage(
     return latest
 
 
-def highest_crossing(checkpoints, current, announced):
-    """The highest checkpoint at/below current that exceeds what this event
-    already announced, or None."""
-    crossed = [(t, m) for (t, m) in checkpoints if current >= t]
+def highest_crossing(thresholds, current, announced) -> int | None:
+    """The highest threshold at/below current that exceeds what this state
+    key already announced, or None."""
+    crossed = [t for t in thresholds if current >= t]
     if not crossed:
         return None
-    threshold, message = crossed[-1]
-    if threshold <= announced:
-        return None
-    return threshold, message
+    threshold = crossed[-1]
+    return None if threshold <= announced else threshold
 
 
 def main() -> int:
@@ -487,15 +510,15 @@ def main() -> int:
         save_state(target.state_id, state)
 
     key = EVENT_STATE_KEYS.get(event_name, STATE_KEY_PROMPT)
-    checkpoints = ACTIONABLE_CHECKPOINTS if turn_end else CHECKPOINTS
-    crossing = highest_crossing(checkpoints, current, state[key])
-    if crossing is None:
+    thresholds = ACTIONABLE_CHECKPOINTS if turn_end else CHECKPOINTS
+    threshold = highest_crossing(thresholds, current, state[key])
+    if threshold is None:
         return 0
-    threshold, message = crossing
 
     state[key] = threshold
     save_state(target.state_id, state)
 
+    message = checkpoint_message(threshold, target.scope, turn_end)
     full_msg = f"[{current:,} tokens used] {message}"
     if turn_end:
         print(json.dumps({"decision": "block", "reason": full_msg}))
