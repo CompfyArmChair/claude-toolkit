@@ -169,9 +169,67 @@ class ContextUsageHookTests(unittest.TestCase):
     def test_stop_hook_active_guard_prevents_reblocking(self):
         self.assertEqual(self.run_hook("Stop", 210_000, stop_hook_active=True), "")
 
-    def test_turn_end_state_is_independent_of_prompt_state(self):
-        # A prompt-event announcement must not silence the turn-end block.
+    # --- spec 5.1 turn-end addendum: the block is a delivery channel. Once an
+    # --- informational channel (prompt or tool key) has announced threshold
+    # --- T for an identity, the turn-end block for T is skipped; it still
+    # --- fires when neither did, and for a higher threshold than announced.
+    # --- Replaces test_turn_end_state_is_independent_of_prompt_state
+    # --- (2026-06-06), whose promise the addendum reverses.
+
+    def test_main_turn_end_skipped_after_prompt_announced_same_threshold(self):
         self.run_hook("UserPromptSubmit", 210_000)
+        self.assertEqual(self.run_hook("Stop", 212_000), "")
+
+    def test_main_turn_end_skipped_after_tool_announced_same_threshold(self):
+        self.run_hook("PostToolUse", 210_000)
+        self.assertEqual(self.run_hook("Stop", 212_000), "")
+
+    def test_agent_turn_end_skipped_after_tool_announced_same_threshold(self):
+        # The controller's normal pause: the mid-wake warning (derived
+        # transcript) landed, so its SubagentStop (explicit transcript, same
+        # agent id) must not force a wasted turn.
+        self._derived_agent_transcript(210_000, "aaa111")
+        self.assertIn("200k", self.run_hook("PostToolUse", 50_000, agent_id="aaa111"))
+        explicit = self._agent_transcript(212_000, agent_id="aaa111")
+        self.assertEqual(
+            self.run_hook(
+                "SubagentStop", 50_000,
+                agent_id="aaa111", agent_transcript_path=str(explicit),
+            ),
+            "",
+        )
+
+    def test_turn_end_still_blocks_when_no_informational_channel_announced(self):
+        # The starved-loop case the block was built for (F20/F22): no prompt
+        # or tool announcement for the identity -> block, both scopes.
+        with self.subTest(scope="main"):
+            out = json.loads(self.run_hook("Stop", 210_000))
+            self.assertEqual(out["decision"], "block")
+            self.assertIn("200k", out["reason"])
+        with self.subTest(scope="agent"):
+            explicit = self._agent_transcript(210_000, agent_id="bbb222")
+            out = json.loads(self.run_hook(
+                "SubagentStop", 50_000,
+                agent_id="bbb222", agent_transcript_path=str(explicit),
+            ))
+            self.assertEqual(out["decision"], "block")
+            self.assertIn("200k", out["reason"])
+
+    def test_turn_end_still_blocks_for_a_higher_threshold_than_announced(self):
+        # Whole claim: only the announced threshold T is skipped. A later,
+        # higher crossing still forces its delivery turn.
+        self.run_hook("UserPromptSubmit", 210_000)
+        out = json.loads(self.run_hook("Stop", 260_000))
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("250k", out["reason"])
+
+    def test_reset_rearms_both_channels_together(self):
+        # 5.1 addendum, last sentence: the 50 percent reset clears all keys,
+        # so after a compaction the turn-end channel is live again even
+        # though the prompt channel had announced before it.
+        self.run_hook("UserPromptSubmit", 210_000)
+        self.assertEqual(self.run_hook("Stop", 212_000), "")   # skipped
+        self.assertEqual(self.run_hook("Stop", 90_000), "")    # <50% -> reset
         out = json.loads(self.run_hook("Stop", 210_000))
         self.assertEqual(out["decision"], "block")
 

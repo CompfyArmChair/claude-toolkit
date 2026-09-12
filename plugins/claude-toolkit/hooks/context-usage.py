@@ -76,6 +76,16 @@ in-progress turn to land in; the block path is the only delivery that works
 there, and it is reserved for actionable crossings. The block is a delivery
 channel, not enforcement.
 
+Turn-end addendum (2026-09-11): because the block is only a delivery
+channel, it is skipped when an informational channel (the "prompt" or
+"tool" state key) has already announced that threshold for the same
+identity - the warning was delivered, and forcing a turn would deliver it
+twice, one wasted turn per controller pause. The block still fires when
+neither informational channel announced the threshold, which is exactly
+the starved-loop case above, and for a higher threshold than the one
+announced. The 50 percent reset clears all keys together, so a compaction
+re-arms both channels.
+
 Loop safety: a blocked turn-end forces one more turn whose own Stop fires
 with stop_hook_active=true - the hook exits immediately on that flag. The
 once-per-threshold state prevents re-announcing the same threshold.
@@ -467,6 +477,14 @@ def highest_crossing(thresholds, current, announced) -> int | None:
     return None if threshold <= announced else threshold
 
 
+def informational_already_announced(state: dict, threshold: int) -> bool:
+    """Turn-end addendum (spec 5.1, 2026-09-11): the block is only a delivery
+    channel. If the prompt or tool channel already delivered this threshold
+    to this identity mid-turn, forcing a turn would deliver it twice and
+    cost the agent a wasted turn per pause."""
+    return max(state[STATE_KEY_PROMPT], state[STATE_KEY_TOOL]) >= threshold
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -513,6 +531,9 @@ def main() -> int:
     thresholds = ACTIONABLE_CHECKPOINTS if turn_end else CHECKPOINTS
     threshold = highest_crossing(thresholds, current, state[key])
     if threshold is None:
+        return 0
+
+    if turn_end and informational_already_announced(state, threshold):
         return 0
 
     state[key] = threshold
