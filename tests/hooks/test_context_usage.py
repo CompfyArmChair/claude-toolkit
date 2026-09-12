@@ -18,6 +18,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOK = REPO_ROOT / "plugins" / "claude-toolkit" / "hooks" / "context-usage.py"
 STATE_DIR = Path.home() / ".claude" / "hooks" / "state"
+HOOKS_JSON = REPO_ROOT / "plugins" / "claude-toolkit" / "hooks" / "hooks.json"
 
 
 class ContextUsageHookTests(unittest.TestCase):
@@ -51,10 +52,10 @@ class ContextUsageHookTests(unittest.TestCase):
         path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
         return path
 
-    def _agent_transcript(self, tokens, agent_id):
-        """A teammate/one-shot agent transcript: every entry isSidechain
-        (the verified on-disk shape of <session>/subagents/agent-<id>.jsonl)."""
-        entry = {
+    def _agent_entry(self, tokens, agent_id):
+        """One assistant entry as the harness writes it in an agent's own
+        transcript: isSidechain on every line (verified on-disk shape)."""
+        return {
             "type": "assistant",
             "isSidechain": True,
             "agentId": agent_id,
@@ -67,8 +68,25 @@ class ContextUsageHookTests(unittest.TestCase):
                 }
             },
         }
+
+    def _agent_transcript(self, tokens, agent_id):
+        """An agent transcript at an EXPLICIT path (what SubagentStop names in
+        agent_transcript_path)."""
         path = self.tmp_dir / f"agent-{agent_id}.jsonl"
-        path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(self._agent_entry(tokens, agent_id)) + "\n", encoding="utf-8"
+        )
+        return path
+
+    def _derived_agent_transcript(self, tokens, agent_id):
+        """The agent's own transcript where the harness puts it, relative to
+        the MAIN transcript this fixture writes at <tmp>/transcript.jsonl:
+        <tmp>/transcript/subagents/agent-<id>.jsonl (spec 5.1 rule 1, K:70-74)."""
+        path = self.tmp_dir / "transcript" / "subagents" / f"agent-{agent_id}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(self._agent_entry(tokens, agent_id)) + "\n", encoding="utf-8"
+        )
         return path
 
     def run_hook(self, event, tokens, **extra):
@@ -151,9 +169,90 @@ class ContextUsageHookTests(unittest.TestCase):
     def test_stop_hook_active_guard_prevents_reblocking(self):
         self.assertEqual(self.run_hook("Stop", 210_000, stop_hook_active=True), "")
 
-    def test_turn_end_state_is_independent_of_prompt_state(self):
-        # A prompt-event announcement must not silence the turn-end block.
+    # --- spec 5.1 turn-end addendum: the block is a delivery channel. Once an
+    # --- informational channel (prompt or tool key) has announced threshold
+    # --- T for an identity, the turn-end block for T is skipped; it still
+    # --- fires when neither did, and for a higher threshold than announced.
+    # --- Replaces test_turn_end_state_is_independent_of_prompt_state
+    # --- (2026-06-06), whose promise the addendum reverses.
+
+    def test_main_turn_end_skipped_after_prompt_announced_same_threshold(self):
         self.run_hook("UserPromptSubmit", 210_000)
+        self.assertEqual(self.run_hook("Stop", 212_000), "")
+
+    def test_main_turn_end_skipped_after_tool_announced_same_threshold(self):
+        self.run_hook("PostToolUse", 210_000)
+        self.assertEqual(self.run_hook("Stop", 212_000), "")
+
+    def test_agent_turn_end_skipped_after_tool_announced_same_threshold(self):
+        # The controller's normal pause: the mid-wake warning (derived
+        # transcript) landed, so its SubagentStop (explicit transcript, same
+        # agent id) must not force a wasted turn.
+        self._derived_agent_transcript(210_000, "aaa111")
+        self.assertIn("200k", self.run_hook("PostToolUse", 50_000, agent_id="aaa111"))
+        explicit = self._agent_transcript(212_000, agent_id="aaa111")
+        self.assertEqual(
+            self.run_hook(
+                "SubagentStop", 50_000,
+                agent_id="aaa111", agent_transcript_path=str(explicit),
+            ),
+            "",
+        )
+
+    def test_subagent_stop_explicit_transcript_wins_over_derived(self):
+        # Spec 5.1 rule 1 / spec 8 test 3: "an explicit agent_transcript_path
+        # wins over the derived path when both exist, so SubagentStop
+        # behaves as today."
+        # Fixture built to break the promise: the SAME agent_id has both a
+        # derived transcript (50k, below every threshold) and an explicit
+        # one (210k) on disk. Only measuring the explicit path produces the
+        # block below; measuring the derived path (or the untouched parent,
+        # at 50k) would not.
+        # Red evidence: with the candidate order in measurement_target()
+        # temporarily swapped (derived tried before explicit), this test
+        # fails - the derived 50k transcript is picked, nothing crosses
+        # 200k, and the assertion on "decision" errors. Reverted, it passes.
+        self._derived_agent_transcript(50_000, "ccc333")
+        explicit = self._agent_transcript(210_000, agent_id="ccc333")
+        out = json.loads(self.run_hook(
+            "SubagentStop", 50_000,
+            agent_id="ccc333", agent_transcript_path=str(explicit),
+        ))
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("200k", out["reason"])
+        self.assertIn("[210,000 tokens used]", out["reason"])
+
+    def test_turn_end_still_blocks_when_no_informational_channel_announced(self):
+        # The starved-loop case the block was built for (F20/F22): no prompt
+        # or tool announcement for the identity -> block, both scopes.
+        with self.subTest(scope="main"):
+            out = json.loads(self.run_hook("Stop", 210_000))
+            self.assertEqual(out["decision"], "block")
+            self.assertIn("200k", out["reason"])
+        with self.subTest(scope="agent"):
+            explicit = self._agent_transcript(210_000, agent_id="bbb222")
+            out = json.loads(self.run_hook(
+                "SubagentStop", 50_000,
+                agent_id="bbb222", agent_transcript_path=str(explicit),
+            ))
+            self.assertEqual(out["decision"], "block")
+            self.assertIn("200k", out["reason"])
+
+    def test_turn_end_still_blocks_for_a_higher_threshold_than_announced(self):
+        # Whole claim: only the announced threshold T is skipped. A later,
+        # higher crossing still forces its delivery turn.
+        self.run_hook("UserPromptSubmit", 210_000)
+        out = json.loads(self.run_hook("Stop", 260_000))
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("250k", out["reason"])
+
+    def test_reset_rearms_both_channels_together(self):
+        # 5.1 addendum, last sentence: the 50 percent reset clears all keys,
+        # so after a compaction the turn-end channel is live again even
+        # though the prompt channel had announced before it.
+        self.run_hook("UserPromptSubmit", 210_000)
+        self.assertEqual(self.run_hook("Stop", 212_000), "")   # skipped
+        self.assertEqual(self.run_hook("Stop", 90_000), "")    # <50% -> reset
         out = json.loads(self.run_hook("Stop", 210_000))
         self.assertEqual(out["decision"], "block")
 
@@ -172,6 +271,8 @@ class ContextUsageHookTests(unittest.TestCase):
         # that work quality may have been compromised. Vague deferral
         # ("operating instructions") stays banned. Escalation walks all
         # three actionable tiers in one session.
+        # Spec 5.1 wording: main-scoped 200k+ messages always say /handover
+        # and never name a pause protocol.
         reasons = {}
         for tokens, tier in (
             (210_000, "200k"),
@@ -185,6 +286,7 @@ class ContextUsageHookTests(unittest.TestCase):
                 self.assertIn("reasoning", reason.lower())    # advisory kept
                 self.assertIn("wrap up", reason.lower())      # instruction
                 self.assertIn("/handover", reason)
+                self.assertNotIn("pause protocol", reason)   # main scope never names it
                 self.assertNotIn("operating instructions", reason.lower())
         self.assertNotIn("stop immediately", reasons["200k"].lower())
         self.assertIn("stop immediately", reasons["250k"].lower())
@@ -359,6 +461,8 @@ class ContextUsageHookTests(unittest.TestCase):
         # implication AND instruct wrap-up + /handover, with the same
         # escalation as the turn-end path (250k/300k stop immediately,
         # 300k notes possible quality compromise).
+        # Spec 5.1 wording: main-scoped 200k+ messages always say /handover
+        # and never name a pause protocol.
         contexts = {}
         for tokens, tier in (
             (210_000, "200k"),
@@ -373,6 +477,7 @@ class ContextUsageHookTests(unittest.TestCase):
                 self.assertIn("reasoning", ctx.lower())       # advisory kept
                 self.assertIn("wrap up", ctx.lower())         # instruction
                 self.assertIn("/handover", ctx)
+                self.assertNotIn("pause protocol", ctx)   # main scope never names it
                 self.assertNotIn("operating instructions", ctx.lower())
         self.assertNotIn("stop immediately", contexts["200k"].lower())
         self.assertIn("stop immediately", contexts["250k"].lower())
@@ -417,6 +522,152 @@ class ContextUsageHookTests(unittest.TestCase):
         proc = self.run_hook_proc(self._payload("Stop", transcript))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout.strip(), "")
+
+    # --- spec 5.1 rules 1-2: the hook measures whoever it is talking to.
+    # --- Every event carrying agent_id is agent-scoped: the agent's OWN
+    # --- transcript (derived beside the main one) under <session>--<agent>
+    # --- state. Never the parent's, never a fallback.
+
+    def test_tool_events_with_agent_id_measure_the_agents_own_transcript(self):
+        # Spec 8 test 1 (5.1 rule 1). Built to break the promise both ways:
+        # parent far past 200k with the agent under every threshold (a
+        # parent-scoped read announces), then the reverse (a parent-scoped
+        # read stays silent). PostToolUse and PostToolUseFailure alike.
+        for event in ("PostToolUse", "PostToolUseFailure"):
+            with self.subTest(event=event, case="parent 250k, agent 50k"):
+                agent_id = f"low{event}"
+                self._derived_agent_transcript(50_000, agent_id)
+                self.assertEqual(self.run_hook(event, 250_000, agent_id=agent_id), "")
+            with self.subTest(event=event, case="parent 50k, agent 210k"):
+                agent_id = f"high{event}"
+                self._derived_agent_transcript(210_000, agent_id)
+                out = json.loads(self.run_hook(event, 50_000, agent_id=agent_id))
+                ctx = out["hookSpecificOutput"]
+                self.assertEqual(ctx["hookEventName"], event)
+                self.assertIn("[210,000 tokens used]", ctx["additionalContext"])
+                self.assertIn("200k", ctx["additionalContext"])
+
+    def test_agent_crossing_leaves_parent_state_byte_identical(self):
+        # Spec 8 test 2 (5.1 rule 1). The parent already owns a state file
+        # (its own 100k announce), so "untouched" is byte identity, not
+        # absence. The parent sits at 110k: a mis-scoped PostToolUse would
+        # record tool=100000 there and change the bytes.
+        self.run_hook("UserPromptSubmit", 110_000)
+        parent_state = STATE_DIR / f"context-usage-{self.session_id}.json"
+        before = parent_state.read_bytes()
+        self._derived_agent_transcript(210_000, "aaa111")
+        out = self.run_hook("PostToolUse", 110_000, agent_id="aaa111")
+        self.assertIn("200k", out)
+        self.assertEqual(parent_state.read_bytes(), before)
+        agent_state = STATE_DIR / f"context-usage-{self.session_id}--aaa111.json"
+        self.assertEqual(
+            json.loads(agent_state.read_text(encoding="utf-8"))["tool"], 200_000
+        )
+
+    def test_agent_id_without_resolvable_transcript_skips_with_breadcrumb(self):
+        # Spec 8 test 4 (5.1 rule 2). No explicit field, no derived file, and
+        # the parent at 300k beside it: any fallback would announce. Expect
+        # nothing on stdout, no state file for either identity, and a stderr
+        # breadcrumb naming the agent.
+        proc = self.run_hook_proc(json.dumps({
+            "hook_event_name": "PostToolUse",
+            "session_id": self.session_id,
+            "transcript_path": str(self._transcript(300_000)),
+            "agent_id": "ghost1",
+        }))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "")
+        self.assertIn("ghost1", proc.stderr)
+        self.assertEqual(
+            list(STATE_DIR.glob(f"context-usage-{self.session_id}*.json")), []
+        )
+
+    def test_post_tool_use_and_failure_share_the_tool_key(self):
+        # Spec 8 test 6 (5.1 events). A threshold announced by one event is
+        # not re-announced by the other - both orders, both scopes, each on
+        # a fresh identity.
+        for first, second in (
+            ("PostToolUse", "PostToolUseFailure"),
+            ("PostToolUseFailure", "PostToolUse"),
+        ):
+            with self.subTest(scope="agent", first=first):
+                agent_id = f"share{first}"
+                self._derived_agent_transcript(210_000, agent_id)
+                self.assertIn("200k", self.run_hook(first, 50_000, agent_id=agent_id))
+                self._derived_agent_transcript(215_000, agent_id)
+                self.assertEqual(self.run_hook(second, 50_000, agent_id=agent_id), "")
+        with self.subTest(scope="main"):
+            self.assertIn("200k", self.run_hook("PostToolUseFailure", 210_000))
+            self.assertEqual(self.run_hook("PostToolUse", 215_000), "")
+
+    def test_hooks_json_registers_post_tool_use_failure_with_context_usage(self):
+        # Spec 8 test 10, context-usage half (5.1 events): PostToolUseFailure
+        # runs the same command with the same timeout as PostToolUse.
+        hooks = json.loads(HOOKS_JSON.read_text(encoding="utf-8"))["hooks"]
+
+        def context_usage_entries(event):
+            return [
+                h for entry in hooks.get(event, []) for h in entry["hooks"]
+                if "context-usage.py" in h["command"]
+            ]
+
+        success = context_usage_entries("PostToolUse")
+        failure = context_usage_entries("PostToolUseFailure")
+        self.assertEqual(len(success), 1)
+        self.assertEqual(len(failure), 1)
+        self.assertEqual(failure[0]["command"], success[0]["command"])
+        self.assertEqual(failure[0]["timeout"], success[0]["timeout"])
+        self.assertNotIn("PostToolBatch", hooks)
+
+    # --- spec 5.1 wording: the instruction suffix is chosen by scope. Agent
+    # --- scope names the pause protocol and never /handover; main scope
+    # --- keeps /handover and never mentions a pause protocol.
+
+    def test_agent_scoped_warnings_instruct_the_pause_protocol_never_handover(self):
+        # Spec 8 test 5. Both channels (mid-turn additionalContext and the
+        # turn-end block), all three actionable tiers, walked in escalation
+        # on one identity per channel.
+        for channel in ("PostToolUse", "SubagentStop"):
+            agent_id = f"word{channel}"
+            messages = {}
+            for tokens, tier in ((210_000, "200k"), (260_000, "250k"), (310_000, "300k")):
+                self._derived_agent_transcript(tokens, agent_id)
+                out = json.loads(self.run_hook(channel, 50_000, agent_id=agent_id))
+                messages[tier] = (
+                    out["reason"] if channel == "SubagentStop"
+                    else out["hookSpecificOutput"]["additionalContext"]
+                )
+            for tier, text in messages.items():
+                with self.subTest(channel=channel, tier=tier):
+                    self.assertIn(tier, text)
+                    self.assertIn("reasoning", text.lower())      # advisory kept
+                    self.assertIn("per your pause protocol", text)  # instruction
+                    self.assertIn("record your state", text)
+                    self.assertNotIn("/handover", text)
+                    self.assertNotIn("operating instructions", text.lower())
+            with self.subTest(channel=channel, tier="escalation"):
+                self.assertNotIn("stop immediately", messages["200k"].lower())
+                self.assertIn("stop immediately", messages["250k"].lower())
+                self.assertIn("stop immediately", messages["300k"].lower())
+                self.assertNotIn("compromised", messages["200k"].lower())
+                self.assertNotIn("compromised", messages["250k"].lower())
+                self.assertIn("compromised", messages["300k"].lower())
+            if channel == "SubagentStop":
+                for text in messages.values():
+                    self.assertIn("forced", text)  # turn-end note kept
+
+    def test_agent_scoped_100k_stays_advisory_only(self):
+        # Spec 5.1 wording: the sub-actionable checkpoint carries no
+        # instruction in either scope. Regression pin (green before and
+        # after this change): red evidence came from temporarily adding a
+        # 100k entry to INSTRUCTIONS[SCOPE_AGENT], not from a code path
+        # exercised by default.
+        self._derived_agent_transcript(110_000, "adv111")
+        out = json.loads(self.run_hook("PostToolUse", 50_000, agent_id="adv111"))
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("100k", ctx)
+        self.assertNotIn("pause protocol", ctx)
+        self.assertNotIn("/handover", ctx)
 
     # --- malformed-input hardening: graceful recovery, exit 0, one stderr
     # --- breadcrumb naming what was malformed (visible under claude --debug)
