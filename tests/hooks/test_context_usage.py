@@ -199,6 +199,29 @@ class ContextUsageHookTests(unittest.TestCase):
             "",
         )
 
+    def test_subagent_stop_explicit_transcript_wins_over_derived(self):
+        # Spec 5.1 rule 1 / spec 8 test 3: "an explicit agent_transcript_path
+        # wins over the derived path when both exist, so SubagentStop
+        # behaves as today."
+        # Fixture built to break the promise: the SAME agent_id has both a
+        # derived transcript (50k, below every threshold) and an explicit
+        # one (210k) on disk. Only measuring the explicit path produces the
+        # block below; measuring the derived path (or the untouched parent,
+        # at 50k) would not.
+        # Red evidence: with the candidate order in measurement_target()
+        # temporarily swapped (derived tried before explicit), this test
+        # fails - the derived 50k transcript is picked, nothing crosses
+        # 200k, and the assertion on "decision" errors. Reverted, it passes.
+        self._derived_agent_transcript(50_000, "ccc333")
+        explicit = self._agent_transcript(210_000, agent_id="ccc333")
+        out = json.loads(self.run_hook(
+            "SubagentStop", 50_000,
+            agent_id="ccc333", agent_transcript_path=str(explicit),
+        ))
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("200k", out["reason"])
+        self.assertIn("[210,000 tokens used]", out["reason"])
+
     def test_turn_end_still_blocks_when_no_informational_channel_announced(self):
         # The starved-loop case the block was built for (F20/F22): no prompt
         # or tool announcement for the identity -> block, both scopes.
