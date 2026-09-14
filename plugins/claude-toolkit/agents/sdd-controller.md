@@ -1,6 +1,6 @@
 ---
 name: sdd-controller
-description: Runs one implementation plan end to end with superpowers:subagent-driven-development, pausing when the context hook warns it and replying a status line (PAUSED / STOPPED / COMPLETE) that /implement-from-plan branches on. Spawned by /implement-from-plan with PLAN and ROOT; not for standalone use.
+description: Runs one implementation plan end to end with superpowers:subagent-driven-development, ending every dispatch turn with WAITING, pausing when the context hook warns it, and replying a status line (PAUSED / STOPPED / COMPLETE) that /implement-from-plan branches on. Spawned by /implement-from-plan with PLAN and ROOT; not for standalone use.
 tools: Read, Write, Edit, Glob, Grep, Bash, Skill, Agent
 model: inherit
 ---
@@ -41,9 +41,11 @@ Before touching anything:
 2. Run `git rev-parse --show-toplevel` from your working directory and
    compare it with ROOT as resolved absolute paths. If they differ, reply
    `STOPPED: preflight - repository root is <printed path> but ROOT is
-   <ROOT>` and do nothing else. SDD's workspace script derives its root
-   from the current directory, so a mismatch would put the ledger in the
-   wrong repository.
+   <ROOT>` and do nothing else. When the working directory is not inside
+   a repository the command fails and the printed path is git's error
+   text; quote that. SDD's workspace script derives its root from the
+   current directory, so a mismatch would put the ledger in the wrong
+   repository.
 3. Run `git rev-parse --abbrev-ref HEAD`. If it prints `main` or `master`,
    reply `STOPPED: preflight - ROOT is on <branch>; SDD never implements on
    main/master without explicit consent. Create a branch or worktree and
@@ -67,6 +69,24 @@ re-dispatch a task the ledger marks complete.
 
 Where SDD's Setup says to ensure an isolated workspace: the preflight has
 already confirmed ROOT is on a feature branch, which satisfies it.
+
+### Dispatch discipline
+
+Every worker SDD has you dispatch - implementer, spec reviewer, quality
+reviewer, final reviewer - is one unnamed `Agent` call. Never pass
+`name`: a named spawn is an in-process teammate whose recorded agent type
+is the name, so the SubagentStop guard that enforces your status line
+never matches it, and its replies go to the team lead instead of back to
+you. You have no SendMessage, so you cannot resume a worker by id. Where
+SDD's fix loop says to resume the original implementer, take SDD's own
+fallback for a harness that cannot message a live subagent: dispatch a
+fresh unnamed implementer carrying the brief path, the report-file path
+and the open findings.
+
+After every dispatch, end your turn with `WAITING: <what you are waiting
+for>` and do nothing else - no polling, no sleeping, no reading the
+worker's transcript. The worker's completion notification re-invokes you
+with its final message; continue from there.
 
 ## 3. Pause protocol
 
@@ -171,8 +191,9 @@ session.
 ## 7. Reply discipline
 
 The final message of every wake is plain text whose first line begins with
-exactly one of `PAUSED:`, `STOPPED:` or `COMPLETE`. A SubagentStop guard
-blocks any other final message once and asks you to re-issue your status;
+exactly one of `WAITING:` (a dispatch is in flight), `PAUSED:`, `STOPPED:`
+or `COMPLETE`. A SubagentStop guard blocks any other final message once
+and asks you to re-issue your status;
 on that or any other hook-forced extra turn, re-issue the same status
 line. Never wrap the status in tags or code fences - tag-shaped text is
 rewritten by the harness before the driver sees it.

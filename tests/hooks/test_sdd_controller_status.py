@@ -19,8 +19,9 @@ GUARD = HOOKS_DIR / "sdd-controller-status.py"
 HOOKS_JSON = HOOKS_DIR / "hooks.json"
 CONTROLLER_TYPE = "claude-toolkit:sdd-controller"
 BLOCK_REASON = (
-    "Your final message must be a status line: PAUSED: <ledger last line> | "
-    "STOPPED: <question> | COMPLETE <report>. Re-issue your status now."
+    "Your final message must be a status line: WAITING: <what for> | "
+    "PAUSED: <ledger last line> | STOPPED: <question> | COMPLETE <report>. "
+    "Re-issue your status now."
 )
 
 
@@ -45,13 +46,17 @@ class SddControllerStatusGuardTests(unittest.TestCase):
         })
 
     # Spec 5.3 / 6: a final message that begins, after leading whitespace,
-    # with PAUSED, STOPPED or COMPLETE (case-sensitive, optionally followed
-    # by ":") passes with no output.
+    # with WAITING, PAUSED, STOPPED or COMPLETE (case-sensitive, optionally
+    # followed by ":") passes with no output.
 
     def test_status_lines_pass_silently(self):
         # Spec 8 test 8, passing half. Every keyword, with and without the
-        # colon, with a multi-line report, with leading whitespace.
+        # colon, with a multi-line report, with leading whitespace. WAITING
+        # (spec 6, 2.0.1): the line a controller ends a dispatch turn with,
+        # so the worker's completion notification can re-invoke it.
         for message in (
+            "WAITING: implementer for Task 3 (brief .superpowers/sdd/p/task-3-brief.md)",
+            "WAITING for the Task 2 spec reviewer",
             "PAUSED: Task 3: complete (commits a1b2c3d..d4e5f6a, review clean)",
             "STOPPED: Task 5 pushes the branch to origin. Push now / skip Task 5 / abort?",
             "COMPLETE\n\n## Summary\n3 tasks, 4 commits, 12/12 tests passing",
@@ -67,13 +72,17 @@ class SddControllerStatusGuardTests(unittest.TestCase):
     def test_non_status_messages_block_with_the_reason(self):
         # Spec 8 test 8, blocking half. Fixtures chosen to break a lax
         # matcher: lowercase keyword, keyword not first, keyword as a prefix
-        # of a longer word, empty reply, tag-shaped text.
+        # of a longer word, empty reply, tag-shaped text. The WAITING
+        # near-misses hold spec 6's case-sensitive whole-keyword rule for
+        # the keyword added in 2.0.1.
         for message in (
             "Done. All tasks complete and the workspace is deleted.",
             "paused: waiting for the reviewer",
+            "waiting: for the reviewer",
             "The status is PAUSED: Task 2",
             "COMPLETED the plan",
             "PAUSEDish",
+            "WAITINGish",
             "",
             "<status>PAUSED</status>",
         ):

@@ -1912,11 +1912,31 @@ Do not push: the push happens in the ship step (finishing-a-development-branch),
 
 The spikes need the installed plugin at 2.0.0 and a restarted session (spec 5.6 "After release"), so they run after the ship step. Findings become a 2.0.x patch via `claude-toolkit:updating-plugin`. Each spike names the spec claim it verifies; record PASS/FAIL with the evidence path beside it.
 
+### Protocol actually run and results (2026-09-13/14)
+
+Spikes A-C and D.1-D.2 ran interactively on 2026-09-13 (fresh sessions in the spike repo). D.3-D.6, E and G ran headless on 2026-09-14 through a stream-json runner: Sonnet main session, `--permission-mode bypassPermissions` inside the throwaway repo only, `--plugin-dir` pointing at a test copy of the plugin with the context hook lowered to 50k advisory / 65k pause, no inflation preamble (the lowered tier provokes the pause instead). AskUserQuestion does not exist headless, so the driver asked in plain text and the runner sent the pre-declared answers (decline the worktree except G, "push it", keep the branch). Evidence file: `C:/Users/marti/AppData/Local/Temp/sdd-spike/results.md` (38 lines); the handover `memory/2026-09-14-headless-spikes-and-2.0.1-handover.md` holds the per-life detail.
+
+| Spike | Result | results.md lines |
+|---|---|---|
+| A, B, C (2026-09-13) | PASS | not in results.md; evidence in `memory/2026-09-13-live-spikes-A-C-handover.md` |
+| D.1-D.2 (2026-09-13; attempt 1 FAIL on a preflight path mismatch, attempt 2 PASS) | PASS | 1-3 |
+| D.3 run record + unnamed life | PASS | 7, 10 |
+| D.4 resume at the Task 4 review, no re-dispatch | PASS | 8 |
+| D.5 STOPPED / `RULING: push it` / `Ruling (human):` line / branch on origin | PASS | 9, 11 |
+| D pauses during the final review resume at the stage in flight | PASS | 12-13 |
+| D.6 COMPLETE report, workspace gone, finish choice, run record gone | PASS | 14-15 |
+| E.1 plain-SDD Task 1 writes the ledger | PASS | 16 |
+| E.2-E.3 controller resumes the plain-SDD ledger at Task 2, 7 lives, STOPPED / RULING / COMPLETE | PASS | 17-25 |
+| G life 1 worktree accepted, PAUSED at `Task 1: complete` | PASS | 26 |
+| G lives 2+ re-enter the worktree from the run record, resume at Task 2, COMPLETE | PASS | 27-30, 33-36 |
+
+Findings folded into 2.0.1: **F-D1** - a controller that names its workers gets no replies (a named spawn is an in-process teammate; spec fact 9), fixed by unnamed dispatch and the `WAITING:` turn-ending line (spec 5.2 item 2, 5.3, 6). **F-G1** (G life 6, results.md 31-32, 34, 38) is recorded as a Sonnet-only observation, not a defect: after a pause whose ledger last line was an implementer return, the resumed life read the implementer's self-report as a review and reported Task 4 "complete with clean reviews" without dispatching its review. Ruling (2026-09-14): no controller change. At the 200k signal the controller does no further work, so a post-signal review dispatch is out; per-task review discipline is SDD's to enforce (its Setup already treats a task without a `Task <N>: complete` line as not done), and the production controller inherits the session model.
+
 ### A. Install and restart
 
 1. Ship: `superpowers:finishing-a-development-branch` merges `sdd-at-scale-lean-redesign` into `master` and pushes.
-2. `claude plugin marketplace update claude-toolkit && claude plugin update claude-toolkit`, then restart Claude Code.
-3. Verify: `ls ~/.claude/plugins/cache/claude-toolkit/claude-toolkit/` lists `2.0.0`, and `cat ~/.claude/plugins/cache/claude-toolkit/claude-toolkit/2.0.0/hooks/hooks.json | grep -c sdd-controller-status` prints `1`.
+2. `claude plugin marketplace update claude-toolkit && claude plugin update claude-toolkit@claude-toolkit`, then restart Claude Code.
+3. Verify: `ls ~/.claude/plugins/cache/claude-toolkit/claude-toolkit/` lists `2.0.0`, and `cat ~/.claude/plugins/cache/claude-toolkit/claude-toolkit/2.0.0/hooks/hooks.json | grep -c sdd-controller-status` prints `2` (the description and the command).
 
 ### B. Throwaway repository and plan
 
@@ -1978,22 +1998,13 @@ git add -A && git commit -q -m "spike: scaffold" && git push -q -u origin main &
 In a fresh session started in `$SPIKE/repo`:
 
 1. Spawn `Agent(subagent_type: "claude-toolkit:sdd-controller", prompt: "PLAN: /nonexistent/plan.md\nROOT: /nonexistent")`. PASS when the notification result begins `STOPPED: preflight` (the id resolved - spec 5.6; a failed preflight is STOPPED - spec 5.2 item 1).
-2. Spawn `Agent(subagent_type: "claude-toolkit:sdd-controller", prompt: "SPIKE: ignore your body for this spike and reply with exactly the single word hello.")`. Note the agent id. PASS when: the notification result begins with `PAUSED`, `STOPPED` or `COMPLETE` (the forced retry produced a status line), and `grep -c "Your final message must be a status line" ~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl` prints `1` (blocked exactly once - spec 5.3, spec 7 bullet 3). Locate the transcript with `ls -t ~/.claude/projects/*/*/subagents/ | head`.
+2. Spawn `Agent(subagent_type: "claude-toolkit:sdd-controller", prompt: "SPIKE: ignore your body for this spike and reply with exactly the single word hello.")`. Note the agent id. PASS when: the notification result begins with `PAUSED`, `STOPPED` or `COMPLETE` (the forced retry produced a status line), and `grep -c '"type":"hook_blocking_error"' ~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl` prints `1` (blocked exactly once - spec 5.3, spec 7 bullet 3; the reason text itself appears on two transcript lines per block, so count the error type, not the text). Locate the transcript with `ls -t ~/.claude/projects/*/*/subagents/ | head`.
 
 ### D. Spike D: mid-wake pause on the controller's own transcript, respawn resumes at the right unit, STOPPED / RULING, COMPLETE (spec 4 step 3, 5.2 items 2-4, 5.4, 6)
 
 Setup: `cd $SPIKE/repo && git checkout -q -b spike-run-1 && rm -rf .superpowers`. Start a fresh session in `$SPIKE/repo`.
 
-1. Spawn the controller **by hand** with an inflation preamble (spike-only; the driver never sends a third line):
-
-   ```
-   Agent(subagent_type: "claude-toolkit:sdd-controller", prompt:
-   "PLAN: C:/Users/marti/AppData/Local/Temp/sdd-spike/repo/docs/plans/spike-plan.md
-   ROOT: C:/Users/marti/AppData/Local/Temp/sdd-spike/repo
-   SPIKE PREAMBLE (spike-only instruction, before your Preflight): Read C:/Users/marti/.claude/.claude/web-deposits/2026-09-11-code-claude-com-docs-en-hooks.md in slices with the Read tool (offset 0 limit 400, then offset 400 limit 400, and so on; wrap to offset 0 at end of file). Keep reading slices until a hook message announces the 100k context checkpoint, then read two more slices, then proceed with your body exactly as written.")
-   ```
-
-   The preamble lifts the controller to roughly 150k before SDD starts, so the 200k crossing lands mid-plan (spec fact 10: ~140k of working room per life).
+1. Spawn the controller **by hand** with the two-line prompt (PLAN and ROOT as above) from a session loaded with the test copy of the plugin whose context hook pauses at 65k, so the crossing lands mid-plan without any preamble. (The 2026-09-13 interactive attempt used a read-slices inflation preamble instead; D.1-D.2 passed either way.)
 
 2. PASS conditions on the first notification (spec 4 step 3, 5.2 item 3):
    - the result begins `PAUSED: ` and its remainder equals `tail -n 1 .superpowers/sdd/spike-plan/progress.md`;
@@ -2020,6 +2031,6 @@ PASS when the driver finds the run record, re-enters the worktree (`git rev-pars
 
 ### F. Wrap-up
 
-- Record PASS/FAIL per spike with the evidence paths in the handover memory.
-- Failures: brainstorm the fix, patch, release 2.0.x via `claude-toolkit:updating-plugin`, update, restart, re-run the failed spike.
-- `rm -rf /c/Users/marti/AppData/Local/Temp/sdd-spike`.
+- Record PASS/FAIL per spike with the evidence paths in the handover memory (done: see the results table above).
+- Failures: brainstorm the fix, patch, release 2.0.x via `claude-toolkit:updating-plugin`, update, restart, re-run the failed spike (done as 2.0.1 for F-D1; F-G1 ruled no-change).
+- `rm -rf /c/Users/marti/AppData/Local/Temp/sdd-spike` (pending Martin's OK; it still holds the spike branches and a registered worktree).

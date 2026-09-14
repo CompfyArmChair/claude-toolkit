@@ -9,9 +9,12 @@ SubagentStop matchers take the agent type, plugin agents use the scoped
 id, and ":" forces the regex path, hence the anchors (R:73).
 
 Grammar (spec 6): the final message, after leading whitespace, starts with
-one of PAUSED, STOPPED, COMPLETE (case-sensitive) as a whole keyword -
-followed by ":", whitespace, or the end of the message. Anything else is
-blocked with a reason telling the controller to re-issue its status.
+one of WAITING, PAUSED, STOPPED, COMPLETE (case-sensitive) as a whole
+keyword - followed by ":", whitespace, or the end of the message. Anything
+else is blocked with a reason telling the controller to re-issue its
+status. WAITING (2.0.1) is the line the controller ends a dispatch turn
+with so the worker's completion notification can re-invoke it; the driver
+never branches on it.
 
 Loop safety: the forced turn's own SubagentStop arrives with
 stop_hook_active=true and always passes - at most one forced retry, never
@@ -27,10 +30,11 @@ import json
 import re
 import sys
 
-STATUS_LINE = re.compile(r"^\s*(PAUSED|STOPPED|COMPLETE)(?::|\s|$)")
+STATUS_LINE = re.compile(r"^\s*(WAITING|PAUSED|STOPPED|COMPLETE)(?::|\s|$)")
 BLOCK_REASON = (
-    "Your final message must be a status line: PAUSED: <ledger last line> | "
-    "STOPPED: <question> | COMPLETE <report>. Re-issue your status now."
+    "Your final message must be a status line: WAITING: <what for> | "
+    "PAUSED: <ledger last line> | STOPPED: <question> | COMPLETE <report>. "
+    "Re-issue your status now."
 )
 
 

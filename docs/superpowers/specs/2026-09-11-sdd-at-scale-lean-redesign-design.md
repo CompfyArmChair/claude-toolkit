@@ -97,7 +97,11 @@ Every load-bearing fact below was verified on Claude Code 2.1.269 on
    by SendMessage to its agent id, and it keeps its transcript memory
    across that resume (live probes, 2026-09-11, recorded in the
    brainstorm notes). Named agents form a flat roster and cannot spawn
-   named children; not used here.
+   named children; not used here. A spawn with `name:` is an in-process
+   teammate whose recorded agent type is the name, so a SubagentStop
+   matcher on the plugin id never fires for it and its replies go to the
+   team lead, not the spawner (guard probe, 2026-09-13; spike finding
+   F-D1, fixed in 2.0.1).
 10. A general-purpose subagent in this environment starts at ~61k tokens
     because its system prompt carries the full MCP tool roster (K:81-83).
     The Read tool refuses a single call over 25,000 tokens (K:50-53).
@@ -258,7 +262,15 @@ Body, in this order:
    and run it end to end, from the ledger's current position. A ledger
    written by an earlier controller life or by a plain SDD run in a main
    session is resumed the same way; the controller has no resume logic of
-   its own.
+   its own. Dispatch discipline (2.0.1, spike finding F-D1): every worker
+   is one unnamed `Agent` call - a named spawn is an in-process teammate
+   whose recorded agent type is the name, so the guard (5.3) never matches
+   it and its replies go to the team lead (fact 9). The controller cannot
+   message a live worker, so where SDD's fix loop resumes the original
+   implementer it takes SDD's own fallback: a fresh unnamed implementer
+   carrying the brief path, the report-file path and the open findings.
+   After every dispatch the controller ends its turn with `WAITING: <what
+   for>`; the worker's completion notification re-invokes it.
 3. **Pause protocol.** When a context warning names your pause protocol:
    finish the step in flight up to its next ledger write (a dispatched
    worker returns and is ledgered; a fix round completes and is ledgered;
@@ -305,11 +317,12 @@ Registered in hooks.json under SubagentStop with matcher
 context-usage hook (both run; each decides independently).
 
 Behaviour: read `last_assistant_message`; strip leading whitespace; if it
-starts with `PAUSED`, `STOPPED` or `COMPLETE` (case-sensitive, optionally
-followed by `:`), exit 0 with no output. Otherwise print
+starts with `WAITING`, `PAUSED`, `STOPPED` or `COMPLETE` (case-sensitive,
+optionally followed by `:`), exit 0 with no output. Otherwise print
 `{"decision": "block", "reason": "Your final message must be a status
-line: PAUSED: <ledger last line> | STOPPED: <question> | COMPLETE
-<report>. Re-issue your status now."}`. If `stop_hook_active` is true,
+line: WAITING: <what for> | PAUSED: <ledger last line> | STOPPED:
+<question> | COMPLETE <report>. Re-issue your status now."}`. If
+`stop_hook_active` is true,
 exit 0 whatever the message: at most one forced retry, never a loop.
 Malformed payloads exit 0 silently, as the context hook does.
 
@@ -352,9 +365,11 @@ dead session is abandoned; the ledger is the resume point.
 
 Spawn: one unnamed `Agent` call, `subagent_type:
 "claude-toolkit:sdd-controller"` (the namespaced id; the bare name does
-not resolve - the 1.7.2 lesson), prompt = PLAN + ROOT. No `model` unless
-Martin asked for one. The driver then ends its turn; the harness
-re-invokes it on the task notification. It never polls.
+not resolve - the 1.7.2 lesson), prompt = PLAN + ROOT. No `name` (fact 9:
+a named spawn is an in-process teammate - wrong agent type for the guard,
+replies to the team lead). No `model` unless Martin asked for one. The
+driver then ends its turn; the harness re-invokes it on the task
+notification. It never polls.
 
 Loop, on each notification:
 
@@ -369,7 +384,9 @@ Loop, on each notification:
   <answer>")`.
 - `COMPLETE`: present the report verbatim; proceed to 5.5.
 - Anything else (the guard already forced one retry): show the reply and
-  ask Martin how to proceed. Never guess a status.
+  ask Martin how to proceed. Never guess a status. A `WAITING:` line is
+  "anything else" here: it can only reach the driver if the harness
+  completed the controller's task with a worker still alive.
 
 End: after the ship step, `rm -f .claude/sdd-run.json .claude/last-plan-doc`
 and announce completion.
@@ -424,13 +441,16 @@ line begins with exactly one of:
 
 | Keyword | Meaning | Driver action |
 |---|---|---|
+| `WAITING: <what for>` (2.0.1) | A worker dispatch is in flight; the turn ends so the completion notification can re-invoke the controller | None - normally never seen; if it arrives, "anything else" (show and ask) |
 | `PAUSED: <ledger last line>` | Context threshold reached; ledger at a boundary | Respawn a fresh controller (after the no-progress guard) |
 | `STOPPED: <question and options>` | One of SDD's four stop reasons, or a failed preflight | Ask Martin; resume the same controller with `RULING:` |
 | `COMPLETE` + report | Final review clean, workspace deleted | Present report; ship; clear pointers |
 
 No FAILED status: an environment the controller cannot work in is a
 question for Martin and is `STOPPED`. Keywords are case-sensitive; the
-guard (5.3) enforces the grammar with one forced retry.
+guard (5.3) enforces the grammar with one forced retry. `WAITING` is a
+turn-ending line, not a driver branch: it exists so the guard accepts the
+dispatch turn that the completion notification resumes.
 
 ## 7. Failure handling
 

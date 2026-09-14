@@ -97,7 +97,10 @@ One unnamed `Agent` call:
   ROOT: <ROOT>
   ```
 
-- No `name`. No `model` unless your human partner asked for one.
+- No `name`: a named spawn is an in-process teammate whose recorded agent
+  type is the name, so the SubagentStop status guard never matches it and
+  its replies go to the team lead, not to you. No `model` unless your
+  human partner asked for one.
 
 Record the agent id the tool returns - a STOPPED question is answered by
 resuming that id. Print one line ("Controller life N spawned for
@@ -146,7 +149,11 @@ question when it reaches the stop case, and you then hold its id.
 deleted. Present the report verbatim, then go to Step 5.
 
 **Anything else** - show the reply verbatim and ask your human partner how
-to proceed. Never guess a status.
+to proceed. Never guess a status. This includes a `WAITING: <what for>`
+line: the controller ends each dispatch turn with it so its worker's
+completion notification can re-invoke it, and it can only reach you if
+the harness completed the controller's task while that worker was still
+alive.
 
 ## Step 5: Ship and clear
 

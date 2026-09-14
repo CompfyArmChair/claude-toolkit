@@ -11,7 +11,7 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 - **dependency-researcher** — Research library/SDK documentation from multiple sources; saves a cited report to docs/research/ and replies with a digest plus the path
 - **violation-verifier** — Verify whether flagged architectural violations are real or false positives
 - **page-courier** — Tier-2 courier of the raw-fetch pipeline: fetches a page in the user's real Chrome and appends its text verbatim to the fetch-page deposit; spawned with URL / DEPOSIT / HELPER from fetch-page's JSON output
-- **sdd-controller** — Internal: spawned by `/implement-from-plan` with `PLAN` and `ROOT`; runs one plan end to end via subagent-driven-development, pauses on the context hook's warning with the SDD ledger at a boundary, and replies a status line (`PAUSED` / `STOPPED` / `COMPLETE`). Not for standalone use.
+- **sdd-controller** — Internal: spawned by `/implement-from-plan` with `PLAN` and `ROOT`; runs one plan end to end via subagent-driven-development, ends every dispatch turn with `WAITING`, pauses on the context hook's warning with the SDD ledger at a boundary, and replies a status line (`PAUSED` / `STOPPED` / `COMPLETE`). Not for standalone use.
 
 ### Commands
 - **/design** — Brainstorm and track a design doc (depends on superpowers plugin)
@@ -32,7 +32,7 @@ Agents, commands, skills, and hooks for Claude Code — covering code review, re
 
 ### Hooks
 - **context-usage** — Context-window checkpoint hook (`UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `SubagentStop`): measures the context of whoever the event is talking to — the agent's own transcript whenever the payload carries an `agent_id`, else the main session's — and announces once per measurement identity, per channel, when usage crosses 100k / 200k / 250k / 300k. Each warning reports the crossing and its implication for reasoning quality; the ≥200k warnings add the baseline instruction — main scope: wrap up and use `/handover`; agent scope: finish the step, record your state, and end your turn per your pause protocol — escalating to stop-immediately at 250k/300k, with 300k noting that work quality may have been compromised. The informational events inject the warning as `additionalContext` mid-turn (the two tool events share one announcement); the turn-end events deliver actionable crossings as `decision:block` only when no informational channel already announced that threshold for the same identity. Per-identity state lives under `~/.claude/hooks/state/`.
-- **sdd-controller-status** — `SubagentStop` guard matched on `^claude-toolkit:sdd-controller$`: blocks (once) a controller reply that is not a status line, so `/implement-from-plan` always branches on `PAUSED` / `STOPPED` / `COMPLETE`
+- **sdd-controller-status** — `SubagentStop` guard matched on `^claude-toolkit:sdd-controller$`: blocks (once) a controller reply that is not a status line (`WAITING` / `PAUSED` / `STOPPED` / `COMPLETE`), so `/implement-from-plan` always branches on `PAUSED` / `STOPPED` / `COMPLETE`
 - **deny-webfetch** — Unconditional PreToolUse deny for WebFetch; the deny reason teaches the raw-fetch substitute with resolved, runnable plugin paths
 - **inject-web-doctrine** — SessionStart injection of the web-research doctrine, rendered from `hooks/web-doctrine.md` with resolved plugin paths
 
