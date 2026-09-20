@@ -2,14 +2,13 @@
 
 **Date:** 2026-09-20
 **Decided by:** Martin (this ruling supersedes the single fixed checkpoint set of 2026-05-31)
-**Component:** `plugins/claude-toolkit/hooks/context-usage.py` (+ its tests, hooks.json description, README)
-**Release:** claude-toolkit 2.0.1 → 2.1.0
+**Component:** `plugins/claude-toolkit/hooks/context-usage.py` and `plugins/claude-toolkit/hooks/context-checkpoints.txt` (+ its tests, hooks.json description, README, and Martin's `~/.claude/statusline.sh`)
+**Release:** claude-toolkit 2.0.1 → 2.1.0; then 2.1.0 → 2.2.0 for §9
 
 ## 1. Problem
 
-The context-usage hook announces checkpoints at fixed absolute token counts
-(100k advisory; 200k / 250k / 300k actionable) for every model. Those figures
-were set for Opus. Fable/Mythos-class models hold far more usable context and
+The context-usage hook announced checkpoints at one fixed set of absolute
+token counts for every model. Those figures were set for Opus. Fable/Mythos-class models hold far more usable context and
 Sonnet-class models less, so one set of figures either interrupts Fable far
 too early or lets Sonnet run far too deep.
 
@@ -18,14 +17,20 @@ too early or lets Sonnet run far too deep.
 Four levels, in order. The wording per level is unchanged from today; only
 the figures move with the family.
 
-| Level | Meaning | Sonnet | Opus | Fable / Mythos |
-|---|---|---|---|---|
-| 0 advisory | informational only, no instruction, never forces a turn | 75k | 100k | 200k |
-| 1 wrap-up | main: wrap up + `/handover`; agent: finish the step, record state, end the turn per the pause protocol | 150k | 200k | 300k |
-| 2 stop | as level 1, prefixed "Stop immediately" | 200k | 250k | 400k |
-| 3 stop, compromised | as level 2, plus note that work quality may have been compromised | 250k | 300k | 450k |
+| Level | Name | Meaning |
+|---|---|---|
+| 0 | `ADVISORY` | informational only, no instruction, never forces a turn |
+| 1 | `WRAP-UP` | main: wrap up + `/handover`; agent: finish the step, record state, end the turn per the pause protocol |
+| 2 | `STOP` | as level 1, prefixed "Stop immediately" |
+| 3 | `STOP-COMPROMISED` | as level 2, plus note that work quality may have been compromised |
 
-Opus keeps today's figures exactly, so any transcript without a readable
+**The figures themselves are not written here.** Under the ruling in §9 they
+live in exactly one artefact,
+`plugins/claude-toolkit/hooks/context-checkpoints.txt`, which is normative:
+one row per family, four ascending figures per row. This section previously
+carried a table of them; §9.5 removed it.
+
+Opus keeps the pre-2.1.0 figures exactly, so any transcript without a readable
 model id behaves as before.
 
 ## 3. Family detection
@@ -45,8 +50,9 @@ model id behaves as before.
   ("Haiku is out of scope. I don't use Haiku"), so this mapping is a
   placeholder, not a considered figure set.** It exists so a Haiku
   transcript is classified rather than falling through to the Opus
-  fallback. Note for whoever revisits it: Haiku 4.5's window is 200k, so
-  under these figures the 200k and 250k checkpoints cannot fire.
+  fallback. Note for whoever revisits it: Haiku 4.5's window is 200k tokens,
+  which the upper checkpoints of the Sonnet row sit at or above, so those
+  checkpoints are unreachable on Haiku in practice.
 - Absent model id → Opus figures, silently (absent fields are normal shape
   for old transcripts and the existing test fixtures).
 - Unknown family word (a model family this hook does not know) → Opus figures
@@ -57,34 +63,53 @@ model id behaves as before.
 
 ## 4. Message composition
 
-- Labels are derived from the figure (`75k`, `150k`, `200k`, ... `450k`).
-- The level-0 advisory text names the family's own figure: "The first 200k
-  tokens - the highest-quality reasoning zone - are consumed." on Fable.
+- The first sentence names the checkpoint, then its figure:
+  `Context checkpoint WRAP-UP crossed at <figure>k`. The name is the
+  checkpoint's identity; the figure is context beside it (§9.3).
+- `(turn-end detection)` stays adjacent to the figure.
+- The level-0 advisory text names the family's own figure ("The first
+  <figure>k tokens - the highest-quality reasoning zone - are consumed.").
 - The `[N tokens used]` prefix, the turn-end note, the scope-chosen
   instructions and the escalation wording are unchanged.
 
 ## 5. Unchanged mechanics
 
-Channels (prompt / tool / stop / subagent_stop), once-per-threshold state
-keyed by the announced absolute figure, the 50% reset, the turn-end
+Channels (prompt / tool / stop / subagent_stop), the 50% reset, the turn-end
 block-skip when an informational channel already announced, and scope
 resolution all stay as specified in
-`2026-06-06-teammate-scoped-context-checkpoints-design.md`. State stores
-absolute figures, so a family switch mid-session degrades gracefully: an
-already-announced higher figure is never re-announced.
+`2026-06-06-teammate-scoped-context-checkpoints-design.md`.
+
+**Once-per-checkpoint state is keyed by the checkpoint's LEVEL, not its
+figure** (§9.4). This section previously said the state was keyed by the
+announced absolute figure, and that "State stores absolute figures, so a family
+switch mid-session degrades gracefully: an already-announced higher figure is
+never re-announced." **That claim was false, and was falsified by reproduction
+on 2026-09-20:** because a figure alone does not identify a checkpoint once the
+figures differ per family, a family switch could leave a channel permanently
+silent while the session sat in the severest band. See §9.1.
 
 ## 6. Status line (outside the plugin)
 
-Martin's `~/.claude/statusline.sh` may show spacers at the family's figures
-on the ctx bar. That script is personal configuration, not a plugin
-component; it carries its own copy of the table in §2 with a comment naming
-this spec as the source of truth.
+Martin's `~/.claude/statusline.sh` colours its context bar by the checkpoint
+zone the session is in. It is personal configuration, not a plugin component,
+but it is a reader of the figures, so under §9.5 it holds no copy of them: it
+resolves the installed plugin's directory from
+`~/.claude/plugins/installed_plugins.json` and reads
+`hooks/context-checkpoints.txt` with shell builtins. If either read fails it
+renders raw consumption with no zone colouring — never a bar drawn from
+guessed figures.
+
+Zone *names* on the bar are out of scope; Martin ruled that separately.
 
 ## 7. Tests (promise citations)
 
-Tests cite this spec by section. §2 fixes the figures per family and the
-wording per level; §3 the detection rule and defaults; §4 the labels and
-the advisory text.
+Tests cite this spec by section. §2 fixes the four level names and the
+wording per level; §3 the detection rule and defaults; §4 the message
+composition; §9 the two announcement promises and the state contract.
+
+Per Martin's ruling in §9.5, **no test asserts a figure.** Figures are fixture
+inputs, read from `context-checkpoints.txt` at test time; what a test asserts
+is the named logic. Changing a figure must require no test edit.
 
 ## 8. Measurement hygiene: placeholder entries are not measured
 
@@ -114,3 +139,107 @@ so they are not re-litigated:
   token fields equal the **last** iteration, not the sum, and the nested
   `cache_creation` object can disagree with the flat field on a model-refusal
   fallback turn. The hook reads only the flat fields, which is correct.
+
+## 9. Named checkpoints and one source of truth (2026-09-20, release 2.2.0)
+
+**Decided by:** Martin. *"We should have really used named checkpoints rather
+than by value because these will change over time."*
+
+### 9.1 Why
+
+A checkpoint was identified by its figure, both on the wire and in the state
+file that prevents repeat announcements. Once §2's figures became per-family a
+figure no longer identified a checkpoint, and §5's "degrades gracefully" claim
+was false: a session that announced a checkpoint on one family and then
+switched to a family where the same token count is a *severer* checkpoint went
+silent on that channel for the rest of the session — while sitting in the band
+whose instruction is "stop immediately".
+
+A second defect: consumers could not name what they react to. The
+`sdd-controller` agent had to enumerate the actionable checkpoints by figure,
+which went stale the moment the figures became per-family.
+
+### 9.2 The two promises
+
+1. **A checkpoint severer than the last one announced on a channel is
+   announced on that channel, whatever its figure.**
+2. **A checkpoint no severer than the last one announced on a channel is never
+   announced again on that channel, whatever its figure.**
+
+"No severer than", not "milder than": the equal-level case is the one that is
+easy to write wrongly. Both promises are stated in levels, so they hold across
+any family switch.
+
+**Accepted cost, named at ruling time.** Promise 2 removes warnings that fire
+today. After a switch to a family with larger figures, a level already
+announced is not announced again under its new, larger number. A level is never
+*missed* — each still fires once per channel — but a re-warn can be deferred by
+a long stretch of tokens. Re-warning on a family change would reintroduce
+exactly the figure-driven noise this ruling removes, and is not part of it.
+
+### 9.3 Wire format
+
+Name first, uppercase: `ADVISORY`, `WRAP-UP`, `STOP`, `STOP-COMPROMISED` — the
+§2 level names, uppercased. The plugin already uses uppercase keywords as
+machine-keyable tokens (`WAITING` / `PAUSED` / `STOPPED` / `COMPLETE`). The
+first sentence becomes `Context checkpoint <NAME> crossed at <figure>k`.
+
+**The hyphen in `WRAP-UP` is load-bearing and must not be "tidied" to a
+space.** Tests prove the level-1 *instruction* is present by matching "wrap up"
+with a space. `WRAP-UP` lowercases to `wrap-up`, which does not contain that,
+so those assertions keep testing the instruction. `WRAP UP` would make them
+pass on the name alone, silently, even if the instruction were deleted.
+
+### 9.4 State file, version 2
+
+Shape: `{"version": 2, "prompt": <level>, "tool": <level>, "stop": <level>,
+"subagent_stop": <level>, "peak_figure": <tokens>}`.
+
+- Channel values are the announced **level**. `0` is a real level
+  (`ADVISORY`), so "nothing announced yet" is `-1`.
+- `peak_figure` is the largest figure announced in this identity's life. It
+  exists only so the 50% reset of §5 keeps working, and it is exactly the
+  previous `max_tracked`, so reset behaviour does not move. It is runtime
+  state, not a configured threshold, so §9.5 does not reach it.
+- **No migration.** A state file that does not say `"version": 2` is ignored —
+  fresh state, nothing carried over. Martin: *"Why are we dealing with legacy
+  values? Once all current sessions end, legacy values aren't a consideration.
+  Legacy sessions will end within moments."* A state file is only ever reopened
+  by the identity that wrote it, so only sessions alive at the instant of
+  upgrade can be affected, and they end within hours. The older
+  `last_announced` migration is deleted for the same reason.
+
+### 9.5 One source of truth for the figures
+
+Martin: *"I don't want to see the actual threshold values anywhere other than
+in a single source of truth. No exceptions."*
+
+`plugins/claude-toolkit/hooks/context-checkpoints.txt` is that source: one row
+per family, four ascending figures per row. Its readers are the hook, the tests
+and the status line (§6), each parsing it independently. Everything else — this
+spec, the hook docstring, `README.md`, `hooks.json`, the agent instructions —
+names checkpoints and never figures.
+
+Plain text rather than JSON, so the status line reads it with shell builtins
+and no extra process. Family aliasing stays in code, per §3: Haiku takes
+Sonnet's row, Mythos takes Fable's, an unreadable id takes Opus's.
+
+**What the rule governs.** Live artefacts: the ones a reader consults to learn
+the current figures, and the ones that must change when a figure changes. Dated
+plans, specs and validation notes record what was true when they were written
+and are not edited. Martin ruled this on 2026-09-20 when he left the 2026-09-11
+spec and plan's stale figures standing as a shipped record.
+
+**What tests may do.** Martin, on this release: *"We can't hard code the values
+for the tests because if the values change, so do the tests. We're interested
+in testing the logic of the NAMED values, not the values themselves."* So no
+test contains a threshold figure, and no test contains a token count chosen
+because of one. Every token input is computed from the ladder at test time;
+every expectation is a name. Changing a figure must cost zero test edits.
+
+**The failure mode this introduces, and its guard.** The hook can now fail to
+read its figures. It must never fail the way this hook exists to prevent —
+silently never firing again (§8 is the same class of defect). An unreadable,
+empty or unparseable ladder produces a stderr breadcrumb naming the file and
+saying the install is broken, and a test asserts that the shipped file parses
+and covers every family §3 maps to.

@@ -80,11 +80,11 @@ channel, not enforcement.
 
 Turn-end addendum (2026-09-11): because the block is only a delivery
 channel, it is skipped when an informational channel (the "prompt" or
-"tool" state key) has already announced that threshold for the same
-identity - the warning was delivered, and forcing a turn would deliver it
-twice, one wasted turn per controller pause. The block still fires when
-neither informational channel announced the threshold, which is exactly
-the starved-loop case above, and for a higher threshold than the one
+"tool" state key) has already announced a checkpoint at least this severe
+for the same identity - the warning was delivered, and forcing a turn would
+deliver it twice, one wasted turn per controller pause. The block still
+fires when neither informational channel announced it, which is exactly the
+starved-loop case above, and for a SEVERER checkpoint than the one
 announced. The 50 percent reset clears all keys together, so a compaction
 re-arms both channels.
 
@@ -92,10 +92,10 @@ Loop safety: a blocked turn-end forces one more turn whose own Stop fires
 with stop_hook_active=true - the hook exits immediately on that flag. The
 once-per-threshold state prevents re-announcing the same threshold.
 
-Checkpoints (cumulative tokens) - per model family since 2026-09-20
+Checkpoints - per model family since 2026-09-20
 (docs/superpowers/specs/2026-09-20-per-model-context-checkpoints-design.md,
-ruled by Martin). Four levels; the wording is per level, the figure per
-family:
+ruled by Martin). Four levels, named on the wire since 2026-09-20 (spec
+§9.3); the wording is per level, the figure per family:
 
   level 0 advisory   - informational only. Left the prime-thinking zone.
   level 1 wrap-up    - ACTIONABLE: also delivered via the turn-end block.
@@ -106,10 +106,12 @@ family:
   level 3 stop,      - ACTIONABLE: as level 2, plus note that work quality
           compromised  may have been compromised.
 
-                   level 0    level 1    level 2    level 3
-  Sonnet, Haiku     75,000    150,000    200,000    250,000
-  Opus             100,000    200,000    250,000    300,000
-  Fable, Mythos    200,000    300,000    400,000    450,000
+The figures themselves live in exactly one artefact, context-checkpoints.txt
+beside this file (spec §9.5, ruled by Martin: "I don't want to see the actual
+threshold values anywhere other than in a single source of truth"). They are
+deliberately absent from this docstring. An unreadable ladder breadcrumbs and
+announces nothing: there is no fallback set, because the figures ARE the
+ruling and guessing them would be worse than saying so loudly.
 
 The family is the word after "claude-" in message.model of the same latest
 assistant entry that supplies the usage, so a mid-session model switch and
@@ -117,21 +119,33 @@ an agent's own model are both followed. Haiku takes the Sonnet figures
 (spec assumption). Absent model: Opus figures, silently. Unknown family:
 Opus figures with a breadcrumb naming the id - a new family is transcript
 drift worth surfacing. Non-string model: treated as absent, breadcrumbed.
-The state file stores the announced figure, so a family switch mid-session
-degrades gracefully: an already-announced higher figure is never repeated.
+
+Once per checkpoint, per channel, keyed by the checkpoint's LEVEL rather than
+its figure (spec §9.2, 2026-09-20). A figure stopped identifying a checkpoint
+when the figures became per-family, and the earlier figure-keyed state was
+silently skipping announcements across a model switch. The two promises:
+a checkpoint SEVERER than the last announced on a channel is announced,
+whatever its figure; one NO SEVERER is never announced again on that channel,
+whatever its figure.
 
 State files (one JSON per measurement identity):
   main loop:  ~/.claude/hooks/state/context-usage-<session_id>.json
   per agent:  ~/.claude/hooks/state/
               context-usage-<session_id>--<agent_id>.json
-  Shape: {"prompt": <t>, "tool": <t>, "stop": <t>, "subagent_stop": <t>}
+  Shape: {"version": 2, "prompt": <level>, "tool": <level>, "stop": <level>,
+          "subagent_stop": <level>, "peak_figure": <tokens>}
+  Channel values are the LEVEL last announced there, or -1 for none (0 is a
+  real level). peak_figure is the largest figure ever announced by this
+  identity, kept only so the reset below still compares tokens.
   Files appear only on a first crossing, so accumulation is bounded to
   identities that actually cross.
-  Legacy field "last_announced" migrates to "prompt" on first read.
+  A file that does not declare version 2 is ignored outright - fresh state,
+  nothing carried over (spec §9.4: only sessions alive at the instant of
+  upgrade can hold one, and they end within hours).
 
-Reset: if current usage falls below 50% of any previously announced threshold
-(e.g. after /compact or /rewind), all tracked thresholds reset - and the
-reset is persisted immediately, so turn-end detection (which announces
+Reset: if current usage falls below 50% of the largest figure this identity
+ever announced (e.g. after /compact or /rewind), every channel resets - and
+the reset is persisted immediately, so turn-end detection (which announces
 nothing below the wrap-up figure that could piggyback persistence)
 re-arms too.
 
@@ -167,6 +181,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+
+def warn(message: str) -> None:
+    """Debug breadcrumb for malformed input (exit code stays 0, so this is
+    invisible in normal use and shows only under claude --debug)."""
+    print(f"context-usage: {message}", file=sys.stderr)
+
+
 SCOPE_MAIN = "main"
 SCOPE_AGENT = "agent"
 
@@ -187,17 +208,21 @@ LEVELS = (LEVEL_ADVISORY, LEVEL_WRAP_UP, LEVEL_STOP, LEVEL_STOP_COMPROMISED)
 # is deliberately absent: never force a turn for an advisory checkpoint.
 ACTIONABLE_LEVELS = (LEVEL_WRAP_UP, LEVEL_STOP, LEVEL_STOP_COMPROMISED)
 
-# Figures per model family, indexed by level (spec section 2).
+# A checkpoint's NAME is its identity on the wire and in state (spec §9.3);
+# its figure is context beside it. Uppercase, like the plugin's other
+# machine-keyable keywords (WAITING / PAUSED / STOPPED / COMPLETE).
+CHECKPOINT_NAMES = {
+    LEVEL_ADVISORY: "ADVISORY",
+    LEVEL_WRAP_UP: "WRAP-UP",
+    LEVEL_STOP: "STOP",
+    LEVEL_STOP_COMPROMISED: "STOP-COMPROMISED",
+}
+
+# The figure families (spec section 2). Opus is the default, keeping the
+# pre-2026-09-20 behaviour for a transcript with no readable model id.
 FAMILY_SONNET = "sonnet"
 FAMILY_OPUS = "opus"
 FAMILY_FABLE = "fable"
-FIGURES_BY_FAMILY = {
-    FAMILY_SONNET: (75_000, 150_000, 200_000, 250_000),
-    FAMILY_OPUS: (100_000, 200_000, 250_000, 300_000),
-    FAMILY_FABLE: (200_000, 300_000, 400_000, 450_000),
-}
-# Opus keeps the pre-2026-09-20 figures, so a transcript with no readable
-# model id behaves exactly as before.
 DEFAULT_FAMILY = FAMILY_OPUS
 
 # The word after "claude-" in the model id names the family (spec section
@@ -212,6 +237,50 @@ FAMILY_BY_MODEL_WORD = {
     "fable": FAMILY_FABLE,
     "mythos": FAMILY_FABLE,
 }
+
+# The one source of the figures (spec §9.5), shipped beside this hook the way
+# web-doctrine.md sits beside inject-web-doctrine.mjs.
+LADDER_FILE = Path(__file__).resolve().parent / "context-checkpoints.txt"
+
+
+def parse_ladder(path: Path) -> dict[str, tuple[int, ...]]:
+    """One row per family, four ascending figures per row; "#" starts a
+    comment. Deliberately trivial: the status line parses the same file with
+    shell builtins, so the format has to stay readable to both."""
+    rows = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        fields = line.split("#", 1)[0].split()
+        if fields:
+            rows[fields[0]] = tuple(int(figure) for figure in fields[1:])
+    return rows
+
+
+def load_figures() -> dict[str, tuple[int, ...]]:
+    """The ladder, or an empty mapping with a breadcrumb naming the file.
+    There is no fallback set of figures: the figures ARE the ruling, so a
+    guess would be worse than announcing nothing loudly. This is the one
+    failure mode the ladder introduces, and the breadcrumb is what keeps it
+    from becoming the silent starvation this hook exists to prevent."""
+    try:
+        rows = parse_ladder(LADDER_FILE)
+        missing = set(FAMILY_BY_MODEL_WORD.values()) - set(rows)
+        wrong_width = [f for f, figures in rows.items() if len(figures) != len(LEVELS)]
+        if missing or wrong_width:
+            raise ValueError(
+                f"missing families {sorted(missing)}, "
+                f"wrong width {sorted(wrong_width)}"
+            )
+    except Exception as exc:
+        warn(
+            f"cannot read the checkpoint figures from {LADDER_FILE} ({exc}) - "
+            "this claude-toolkit install is broken and NO checkpoint can be "
+            "announced until the file is restored"
+        )
+        return {}
+    return rows
+
+
+FIGURES_BY_FAMILY = load_figures()
 
 IMPLICATIONS = {
     LEVEL_ADVISORY: (
@@ -277,10 +346,15 @@ TURN_END_NOTE = "This turn was forced so the warning could reach you."
 
 @dataclass(frozen=True)
 class Checkpoint:
-    """One crossing candidate: a level and the family's figure for it."""
+    """One crossing candidate: a level, the name that identifies it, and the
+    family's figure for it."""
 
     level: int
     figure: int
+
+    @property
+    def name(self) -> str:
+        return CHECKPOINT_NAMES[self.level]
 
     @property
     def label(self) -> str:
@@ -317,7 +391,8 @@ def checkpoint_message(checkpoint: Checkpoint, scope: str, turn_end: bool) -> st
     detection = " (turn-end detection)" if turn_end else ""
     implication = IMPLICATIONS[checkpoint.level].format(label=checkpoint.label)
     parts = [
-        f"Context checkpoint {checkpoint.label} crossed{detection}. {implication}"
+        f"Context checkpoint {checkpoint.name} crossed at {checkpoint.label}"
+        f"{detection}. {implication}"
     ]
     if turn_end:
         parts.append(TURN_END_NOTE)
@@ -348,6 +423,41 @@ STATE_KEYS = (
     STATE_KEY_STOP,
     STATE_KEY_SUBAGENT_STOP,
 )
+STATE_KEY_VERSION = "version"
+STATE_KEY_PEAK_FIGURE = "peak_figure"
+STATE_VERSION = 2
+# Nothing announced yet on a channel. Level 0 is a real level (ADVISORY), so
+# zero cannot stand for "none" now that channels hold levels (spec §9.4).
+LEVEL_NONE = -1
+STORABLE_LEVELS = (LEVEL_NONE, *LEVELS)
+
+
+@dataclass
+class State:
+    """What one measurement identity has announced (spec §9.4). A dataclass
+    rather than a bare dict so a level and the one figure cannot be confused,
+    and so serialisation is written out field by field - the comprehension it
+    replaces silently dropped every key outside STATE_KEYS."""
+
+    levels: dict[str, int]
+    peak_figure: int
+
+    @classmethod
+    def fresh(cls) -> "State":
+        return cls({key: LEVEL_NONE for key in STATE_KEYS}, 0)
+
+    def record(self, key: str, checkpoint: Checkpoint) -> None:
+        """Remember that this channel announced this checkpoint."""
+        self.levels[key] = checkpoint.level
+        self.peak_figure = max(self.peak_figure, checkpoint.figure)
+
+    def as_dict(self) -> dict:
+        """The flat on-disk shape, which stays the documented file contract."""
+        return {
+            STATE_KEY_VERSION: STATE_VERSION,
+            **self.levels,
+            STATE_KEY_PEAK_FIGURE: self.peak_figure,
+        }
 
 # PostToolUse and PostToolUseFailure share one key: one mid-turn announcement
 # per threshold, whichever event lands first (a failed tool call fires only
@@ -360,12 +470,6 @@ EVENT_STATE_KEYS = {
     EVENT_STOP: STATE_KEY_STOP,
     EVENT_SUBAGENT_STOP: STATE_KEY_SUBAGENT_STOP,
 }
-
-
-def warn(message: str) -> None:
-    """Debug breadcrumb for malformed input (exit code stays 0, so this is
-    invisible in normal use and shows only under claude --debug)."""
-    print(f"context-usage: {message}", file=sys.stderr)
 
 
 def str_field(payload: dict, field: str) -> str | None:
@@ -432,29 +536,43 @@ def state_path(state_id: str) -> Path:
     return STATE_DIR / f"context-usage-{safe}.json"
 
 
-def load_state(state_id: str) -> dict:
+def stored_level(value: object, key: str) -> int:
+    """A channel value read back from disk. Anything that is not a storable
+    level becomes LEVEL_NONE with a breadcrumb, following this module's
+    malformed-input doctrine: harmless (a repeated warning), never a missed
+    one."""
+    if isinstance(value, (int, float)) and value in STORABLE_LEVELS:
+        return int(value)
+    warn(f"state key {key!r} holds {value!r}, not a checkpoint level - "
+         "treated as nothing announced")
+    return LEVEL_NONE
+
+
+def load_state(state_id: str) -> State:
+    """The identity's record, or fresh state. A file that does not declare
+    version 2 is ignored outright - no migration (spec §9.4)."""
     try:
         data = json.loads(state_path(state_id).read_text(encoding="utf-8"))
     except Exception:
-        return {k: 0 for k in STATE_KEYS}
+        return State.fresh()
     if not isinstance(data, dict):
         warn("malformed state file (not a JSON object) - using fresh state")
-        return {k: 0 for k in STATE_KEYS}
-    # Migrate legacy single-event state.
-    if "last_announced" in data and STATE_KEY_PROMPT not in data:
-        data[STATE_KEY_PROMPT] = data["last_announced"]
-    for k in STATE_KEYS:
-        data.setdefault(k, 0)
-        v = data.get(k)
-        data[k] = int(v) if isinstance(v, (int, float)) else 0
-    return data
+        return State.fresh()
+    if data.get(STATE_KEY_VERSION) != STATE_VERSION:
+        return State.fresh()
+    peak = data.get(STATE_KEY_PEAK_FIGURE)
+    return State(
+        {key: stored_level(data.get(key), key) for key in STATE_KEYS},
+        int(peak) if isinstance(peak, (int, float)) and peak > 0 else 0,
+    )
 
 
-def save_state(state_id: str, state: dict) -> None:
+def save_state(state_id: str, state: State) -> None:
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
-        out = {k: int(state.get(k, 0)) for k in STATE_KEYS}
-        state_path(state_id).write_text(json.dumps(out), encoding="utf-8")
+        state_path(state_id).write_text(
+            json.dumps(state.as_dict()), encoding="utf-8"
+        )
     except Exception:
         pass
 
@@ -586,26 +704,30 @@ def latest_assistant_message(
 
 
 def highest_crossing(
-    checkpoints: tuple[Checkpoint, ...], current: int, announced: int
+    checkpoints: tuple[Checkpoint, ...], current: int, announced_level: int
 ) -> Checkpoint | None:
-    """The highest checkpoint at/below current whose figure exceeds what
-    this state key already announced, or None."""
+    """The highest checkpoint this usage has crossed, if it is severer than
+    what this state key already announced (spec §9.2), else None. Whether a
+    checkpoint is CROSSED is a token comparison and stays one; only whether
+    it has already been ANNOUNCED moves to levels."""
     crossed = [c for c in checkpoints if current >= c.figure]
     if not crossed:
         return None
     top = crossed[-1]
-    return None if top.figure <= announced else top
+    return None if top.level <= announced_level else top
 
 
-def informational_already_announced(state: dict, figure: int) -> bool:
+def informational_already_announced(state: State, level: int) -> bool:
     """Turn-end addendum (spec 5.1, 2026-09-11): the block is only a delivery
-    channel. If the prompt or tool channel already delivered this figure
-    to this identity mid-turn, forcing a turn would deliver it twice and
-    cost the agent a wasted turn per pause."""
-    return max(state[STATE_KEY_PROMPT], state[STATE_KEY_TOOL]) >= figure
+    channel. If the prompt or tool channel already delivered a checkpoint at
+    least this severe to this identity mid-turn, forcing a turn would deliver
+    it twice and cost the agent a wasted turn per pause."""
+    return max(state.levels[STATE_KEY_PROMPT], state.levels[STATE_KEY_TOOL]) >= level
 
 
 def main() -> int:
+    if not FIGURES_BY_FAMILY:
+        return 0  # load_figures() has already breadcrumbed why
     try:
         payload = json.load(sys.stdin)
     except Exception:
@@ -642,24 +764,23 @@ def main() -> int:
     # Reset on significant backwards jump (compact, rewind, fresh transcript).
     # Persist immediately: the turn-end path announces nothing below the
     # family's wrap-up figure, so without persistence a post-compact session
-    # would stay silenced.
-    max_tracked = max(state[k] for k in STATE_KEYS)
-    if max_tracked > 0 and current < max_tracked * RESET_RATIO:
-        for k in STATE_KEYS:
-            state[k] = 0
+    # would stay silenced. The comparison is against the largest FIGURE this
+    # identity ever announced - a token measurement, not a level.
+    if state.peak_figure > 0 and current < state.peak_figure * RESET_RATIO:
+        state = State.fresh()
         save_state(target.state_id, state)
 
     key = EVENT_STATE_KEYS.get(event_name, STATE_KEY_PROMPT)
     crossing = highest_crossing(
-        checkpoints_for(family, turn_end), current, state[key]
+        checkpoints_for(family, turn_end), current, state.levels[key]
     )
     if crossing is None:
         return 0
 
-    if turn_end and informational_already_announced(state, crossing.figure):
+    if turn_end and informational_already_announced(state, crossing.level):
         return 0
 
-    state[key] = crossing.figure
+    state.record(key, crossing)
     save_state(target.state_id, state)
 
     warning = checkpoint_message(crossing, target.scope, turn_end)

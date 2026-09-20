@@ -1,0 +1,4 @@
+# The context-checkpoint ladder is read by ~/.claude/statusline.sh with shell
+# builtins, which do not strip a carriage return. Ship it LF on every platform
+# so the status line never has to guess at the line ending it was given.
+plugins/claude-toolkit/hooks/context-checkpoints.txt text eol=lf

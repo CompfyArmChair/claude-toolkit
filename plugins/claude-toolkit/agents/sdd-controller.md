@@ -90,10 +90,11 @@ with its final message; continue from there.
 
 ## 3. Pause protocol
 
-The context hook measures your own transcript and warns you mid-wake. A
-checkpoint message that tells you to end your turn **per your pause
-protocol** is the pause signal; the advisory checkpoint carries no such
-instruction. On receiving it:
+The context hook measures your own transcript and warns you mid-wake. Its
+message names the checkpoint crossed: `ADVISORY`, `WRAP-UP`, `STOP` or
+`STOP-COMPROMISED`. `WRAP-UP` and every name above it is the pause signal -
+each tells you to end your turn **per your pause protocol**. `ADVISORY`
+carries no instruction and is not a pause signal. On receiving one:
 
 1. Finish the step in flight up to its next ledger write, and no further:
    - a dispatched worker returns and its result is ledgered (a task
@@ -105,9 +106,9 @@ instruction. On receiving it:
    from the ledger.
 
 Never pause between a dispatch and its return - the ledger would be behind
-git, and the next life would re-run or lose the step. The escalated
-checkpoint messages change nothing but urgency: still no new dispatch,
-still finish the in-flight step to its ledger write, then pause.
+git, and the next life would re-run or lose the step. `STOP` and
+`STOP-COMPROMISED` change nothing but urgency: still no new dispatch, still
+finish the in-flight step to its ledger write, then pause.
 
 A fresh life resumes exactly at the ledger's next unfinished unit; the
 driver spawns it with the same PLAN and ROOT.

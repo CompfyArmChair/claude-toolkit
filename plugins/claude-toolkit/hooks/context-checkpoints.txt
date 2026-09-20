@@ -1,0 +1,15 @@
+# claude-toolkit context checkpoints - THE ONE SOURCE OF TRUTH FOR THE FIGURES.
+# Ruled by Martin 2026-09-20: "I don't want to see the actual threshold values
+# anywhere other than in a single source of truth. No exceptions."
+# Spec: docs/superpowers/specs/2026-09-20-per-model-context-checkpoints-design.md (section 9.5)
+#
+# One row per model family, four ascending token figures per row:
+#   <family> <ADVISORY> <WRAP-UP> <STOP> <STOP-COMPROMISED>
+#
+# Edit a figure HERE and nowhere else. Readers: the context-usage hook, its
+# tests, and ~/.claude/statusline.sh. Family aliasing lives in code (spec
+# section 3): Haiku takes sonnet's row, Mythos takes fable's, an unreadable
+# model id takes opus's.
+sonnet   75000 150000 200000 250000
+opus    100000 200000 250000 300000
+fable   200000 300000 400000 450000
