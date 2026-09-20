@@ -19,3 +19,6 @@ node_modules/
 # Local session/orchestration artifacts (machine-local, not branch deliverables)
 .claude/
 docs/superpowers/handovers/
+
+# Python bytecode (from running tests/hooks)
+__pycache__/

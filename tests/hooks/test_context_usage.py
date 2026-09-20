@@ -21,7 +21,10 @@ STATE_DIR = Path.home() / ".claude" / "hooks" / "state"
 HOOKS_JSON = REPO_ROOT / "plugins" / "claude-toolkit" / "hooks" / "hooks.json"
 
 
-class ContextUsageHookTests(unittest.TestCase):
+class HookFixture(unittest.TestCase):
+    """Shared fixture: temp transcripts, per-test session identity, state
+    cleanup, and the subprocess hook contract. No tests of its own."""
+
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -36,45 +39,50 @@ class ContextUsageHookTests(unittest.TestCase):
         for state_file in STATE_DIR.glob(f"context-usage-{self.session_id}*.json"):
             state_file.unlink()
 
-    def _transcript(self, tokens):
-        entry = {
-            "type": "assistant",
-            "message": {
-                "usage": {
-                    "input_tokens": tokens,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
-                    "output_tokens": 0,
-                }
-            },
+    @staticmethod
+    def _usage(tokens):
+        return {
+            "input_tokens": tokens,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "output_tokens": 0,
         }
+
+    def _main_entry(self, tokens, model=None):
+        """One main-transcript assistant entry. No model -> the hook's
+        default (Opus) figures (spec 2026-09-20 §3); a model id picks that
+        family's figures."""
+        message = {"usage": self._usage(tokens)}
+        if model is not None:
+            message["model"] = model
+        return {"type": "assistant", "message": message}
+
+    def _transcript(self, tokens, model=None):
+        entry = self._main_entry(tokens, model)
         path = self.tmp_dir / "transcript.jsonl"
         path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
         return path
 
-    def _agent_entry(self, tokens, agent_id):
+    def _agent_entry(self, tokens, agent_id, model=None):
         """One assistant entry as the harness writes it in an agent's own
         transcript: isSidechain on every line (verified on-disk shape)."""
+        message = {"usage": self._usage(tokens)}
+        if model is not None:
+            message["model"] = model
         return {
             "type": "assistant",
             "isSidechain": True,
             "agentId": agent_id,
-            "message": {
-                "usage": {
-                    "input_tokens": tokens,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
-                    "output_tokens": 0,
-                }
-            },
+            "message": message,
         }
 
-    def _agent_transcript(self, tokens, agent_id):
+    def _agent_transcript(self, tokens, agent_id, model=None):
         """An agent transcript at an EXPLICIT path (what SubagentStop names in
         agent_transcript_path)."""
         path = self.tmp_dir / f"agent-{agent_id}.jsonl"
         path.write_text(
-            json.dumps(self._agent_entry(tokens, agent_id)) + "\n", encoding="utf-8"
+            json.dumps(self._agent_entry(tokens, agent_id, model)) + "\n",
+            encoding="utf-8",
         )
         return path
 
@@ -89,11 +97,11 @@ class ContextUsageHookTests(unittest.TestCase):
         )
         return path
 
-    def run_hook(self, event, tokens, **extra):
+    def run_hook(self, event, tokens, model=None, **extra):
         payload = {
             "hook_event_name": event,
             "session_id": self.session_id,
-            "transcript_path": str(self._transcript(tokens)),
+            "transcript_path": str(self._transcript(tokens, model)),
             **extra,
         }
         proc = self.run_hook_proc(json.dumps(payload))
@@ -130,6 +138,13 @@ class ContextUsageHookTests(unittest.TestCase):
 
     def _usage_entry(self, usage):
         return json.dumps({"type": "assistant", "message": {"usage": usage}})
+
+
+
+class ContextUsageHookTests(HookFixture):
+    """Channel, scope, state and malformed-input behaviour. Fixtures here
+    carry no model id, so every figure asserted is the hook's default
+    (Opus) set - spec 2026-09-20 §3."""
 
     # --- turn-end (Stop / SubagentStop): actionable crossings block ---
 
@@ -811,6 +826,256 @@ class ContextUsageHookTests(unittest.TestCase):
         self.assertEqual(out["decision"], "block")
         self.assertIn("200k", out["reason"])
         self.assertIn("transcript", proc.stderr)
+
+    def test_placeholder_entries_are_not_measured(self):
+        # Spec 2026-09-20 section 8: an entry whose model is "<synthetic>",
+        # or whose four token fields are all zero, is a harness placeholder
+        # and not an API response. The hook measures the latest REAL
+        # response, so a trailing placeholder must not silence the warning.
+        placeholder = {
+            "type": "assistant",
+            "message": {
+                "model": "<synthetic>",
+                "usage": {
+                    "input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 0,
+                },
+            },
+        }
+        zero_usage = {
+            "type": "assistant",
+            "message": {"model": "claude-opus-5", "usage": self._usage(0)},
+        }
+        for case, trailing in (
+            ("synthetic model", placeholder),
+            ("all-zero usage", zero_usage),
+        ):
+            with self.subTest(case=case):
+                self.session_id = f"{self.session_id}-x"
+                transcript = self._transcript_lines(
+                    json.dumps(self._main_entry(210_000, "claude-opus-5")),
+                    json.dumps(trailing),
+                )
+                proc = self.run_hook_proc(self._payload("Stop", transcript))
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                out = json.loads(proc.stdout.strip())
+                self.assertEqual(out["decision"], "block")
+                self.assertIn("[210,000 tokens used]", out["reason"])
+
+    def test_transcript_of_only_placeholders_measures_nothing(self):
+        # Spec section 8: nothing real to measure means no announcement,
+        # never a zero reading treated as a real measurement.
+        transcript = self._transcript_lines(
+            json.dumps({
+                "type": "assistant",
+                "message": {"model": "<synthetic>", "usage": self._usage(0)},
+            })
+        )
+        proc = self.run_hook_proc(self._payload("Stop", transcript))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "")
+
+
+class PerModelCheckpointTests(HookFixture):
+    """Per-model checkpoint figures.
+
+    Promise source: docs/superpowers/specs/2026-09-20-per-model-context-
+    checkpoints-design.md (ruled by Martin, 2026-09-20). §2 fixes the four
+    figures per family and the wording per level, §3 the family detection
+    rule and its defaults, §4 the labels and the advisory text. Every case
+    runs under its own session identity so once-per-threshold state never
+    leaks between families or cases.
+    """
+
+    # Spec §2, plus the §3 Haiku assumption (Haiku takes the Sonnet figures).
+    FIGURES = {
+        "claude-sonnet-5": (75_000, 150_000, 200_000, 250_000),
+        "claude-haiku-4-5-20251001": (75_000, 150_000, 200_000, 250_000),
+        "claude-opus-5": (100_000, 200_000, 250_000, 300_000),
+        "claude-fable-5-1": (200_000, 300_000, 400_000, 450_000),
+        "claude-mythos-5-1": (200_000, 300_000, 400_000, 450_000),
+    }
+
+    # Spec §2 wording per actionable level: (must contain, must not contain),
+    # matched case-insensitively.
+    ESCALATION = {
+        1: ((), ("stop immediately", "compromised")),
+        2: (("stop immediately",), ("compromised",)),
+        3: (("stop immediately", "compromised"), ()),
+    }
+
+    def setUp(self):
+        super().setUp()
+        self._base_session_id = self.session_id
+
+    def _remove_state(self):
+        # Cases rotate session_id under one base prefix; clean them all.
+        for state_file in STATE_DIR.glob(
+            f"context-usage-{self._base_session_id}*.json"
+        ):
+            state_file.unlink()
+
+    def _fresh_identity(self, *tags):
+        self.session_id = "-".join((self._base_session_id, *map(str, tags)))
+
+    @staticmethod
+    def _label(figure):
+        return f"{figure // 1000}k"
+
+    def test_advisory_figure_is_informational_only_per_family(self):
+        # Spec §2 level 0 and §4: the family's own advisory figure is
+        # announced mid-turn naming that figure, carries no instruction,
+        # and never forces a turn; below it nothing is announced.
+        for model, figures in self.FIGURES.items():
+            advisory = figures[0]
+            with self.subTest(model=model, case="below advisory"):
+                self._fresh_identity(model, "below")
+                self.assertEqual(
+                    self.run_hook("UserPromptSubmit", advisory - 1_000, model=model),
+                    "",
+                )
+            with self.subTest(model=model, case="advisory mid-turn"):
+                self._fresh_identity(model, "adv")
+                out = json.loads(
+                    self.run_hook("UserPromptSubmit", advisory + 10_000, model=model)
+                )
+                ctx = out["hookSpecificOutput"]["additionalContext"]
+                self.assertIn(
+                    f"Context checkpoint {self._label(advisory)} crossed", ctx
+                )
+                self.assertIn(f"The first {self._label(advisory)} tokens", ctx)
+                self.assertNotIn("/handover", ctx)
+                self.assertNotIn("pause protocol", ctx)
+            with self.subTest(model=model, case="advisory never blocks"):
+                self._fresh_identity(model, "advstop")
+                self.assertEqual(
+                    self.run_hook("Stop", advisory + 10_000, model=model), ""
+                )
+
+    def test_actionable_figures_escalate_per_family(self):
+        # Spec §2 levels 1-3: each family's figure blocks at turn end with
+        # that level's wording and the main-scope /handover instruction;
+        # just below the wrap-up figure nothing blocks.
+        for model, figures in self.FIGURES.items():
+            with self.subTest(model=model, case="below wrap-up"):
+                self._fresh_identity(model, "belowwrap")
+                self.assertEqual(
+                    self.run_hook("Stop", figures[1] - 1_000, model=model), ""
+                )
+            for level in (1, 2, 3):
+                figure = figures[level]
+                must, must_not = self.ESCALATION[level]
+                with self.subTest(model=model, level=level):
+                    self._fresh_identity(model, level)
+                    out = json.loads(
+                        self.run_hook("Stop", figure + 10_000, model=model)
+                    )
+                    self.assertEqual(out["decision"], "block")
+                    reason = out["reason"]
+                    self.assertIn(
+                        f"Context checkpoint {self._label(figure)} crossed", reason
+                    )
+                    self.assertIn("/handover", reason)
+                    for phrase in must:
+                        self.assertIn(phrase, reason.lower())
+                    for phrase in must_not:
+                        self.assertNotIn(phrase, reason.lower())
+
+    def test_fable_class_is_not_told_to_hand_over_below_300k(self):
+        # Spec §2: on Fable and Mythos the wrap-up instruction starts at
+        # 300k, inclusive. 210k and 299k were "wrap up + /handover" under
+        # the old single set; they must now stay silent.
+        for model in ("claude-fable-5-1", "claude-mythos-5-1"):
+            for tokens in (210_000, 299_000):
+                with self.subTest(model=model, tokens=tokens):
+                    self._fresh_identity(model, tokens)
+                    self.assertEqual(self.run_hook("Stop", tokens, model=model), "")
+            with self.subTest(model=model, tokens=300_000):
+                self._fresh_identity(model, "at300")
+                out = json.loads(self.run_hook("Stop", 300_000, model=model))
+                self.assertEqual(out["decision"], "block")
+                self.assertIn("Context checkpoint 300k crossed", out["reason"])
+                self.assertIn("/handover", out["reason"])
+                self.assertNotIn("stop immediately", out["reason"].lower())
+
+    def test_unknown_or_absent_model_uses_opus_figures(self):
+        # Spec §3: absent id -> Opus figures silently; unknown family ->
+        # Opus figures with a breadcrumb naming the id; non-string id ->
+        # treated as absent with the malformed-input breadcrumb.
+        with self.subTest(case="absent"):
+            self._fresh_identity("absent")
+            out = json.loads(self.run_hook("Stop", 210_000))
+            self.assertIn("Context checkpoint 200k crossed", out["reason"])
+        with self.subTest(case="unknown family"):
+            self._fresh_identity("unknown")
+            transcript = self._transcript(210_000, model="claude-zephyr-9")
+            proc = self.run_hook_proc(self._payload("Stop", transcript))
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            out = json.loads(proc.stdout.strip())
+            self.assertIn("Context checkpoint 200k crossed", out["reason"])
+            self.assertIn("claude-zephyr-9", proc.stderr)
+        with self.subTest(case="non-string"):
+            self._fresh_identity("nonstring")
+            transcript = self._transcript(210_000, model=42)
+            proc = self.run_hook_proc(self._payload("Stop", transcript))
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            out = json.loads(proc.stdout.strip())
+            self.assertIn("Context checkpoint 200k crossed", out["reason"])
+            self.assertIn("model", proc.stderr)
+
+    def test_family_is_read_from_the_entry_that_supplies_the_usage(self):
+        # Spec §3: the model id comes from the same latest assistant entry
+        # as the usage figure, so a mid-session model switch is followed.
+        with self.subTest(case="opus then fable"):
+            self._fresh_identity("switch-to-fable")
+            transcript = self._transcript_lines(
+                json.dumps(self._main_entry(50_000, "claude-opus-5")),
+                json.dumps(self._main_entry(210_000, "claude-fable-5-1")),
+            )
+            proc = self.run_hook_proc(self._payload("Stop", transcript))
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout.strip(), "")
+        with self.subTest(case="fable then opus"):
+            self._fresh_identity("switch-to-opus")
+            transcript = self._transcript_lines(
+                json.dumps(self._main_entry(50_000, "claude-fable-5-1")),
+                json.dumps(self._main_entry(210_000, "claude-opus-5")),
+            )
+            proc = self.run_hook_proc(self._payload("Stop", transcript))
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            out = json.loads(proc.stdout.strip())
+            self.assertIn("Context checkpoint 200k crossed", out["reason"])
+
+    def test_agent_scope_reads_the_agent_transcript_model(self):
+        # Spec §3 with the scope rules of the 2026-06-06 spec §5.1: an agent
+        # is measured on its own transcript, so its own model id picks the
+        # figures. A Sonnet worker under a Fable main session blocks at
+        # 150k with the agent wording; a Fable worker at 210k stays silent.
+        with self.subTest(case="sonnet worker at 160k"):
+            self._fresh_identity("sonnet-worker")
+            agent_path = self._agent_transcript(160_000, "w1", model="claude-sonnet-5")
+            out = json.loads(
+                self.run_hook(
+                    "SubagentStop", 50_000, model="claude-fable-5-1",
+                    agent_id="w1", agent_transcript_path=str(agent_path),
+                )
+            )
+            self.assertEqual(out["decision"], "block")
+            self.assertIn("Context checkpoint 150k crossed", out["reason"])
+            self.assertIn("pause protocol", out["reason"])
+            self.assertNotIn("/handover", out["reason"])
+        with self.subTest(case="fable worker at 210k"):
+            self._fresh_identity("fable-worker")
+            agent_path = self._agent_transcript(210_000, "w2", model="claude-fable-5-1")
+            self.assertEqual(
+                self.run_hook(
+                    "SubagentStop", 50_000, model="claude-opus-5",
+                    agent_id="w2", agent_transcript_path=str(agent_path),
+                ),
+                "",
+            )
 
 
 if __name__ == "__main__":

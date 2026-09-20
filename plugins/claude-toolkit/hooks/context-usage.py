@@ -16,10 +16,12 @@ per measurement identity, per channel:
                         whichever lands first. PostToolUse fires only after
                         a tool call succeeds; a failed call fires
                         PostToolUseFailure (K:50-57).
-  Stop               -> turn-end: for ACTIONABLE crossings (>= 200k) returns
+  Stop               -> turn-end: for ACTIONABLE crossings (the model
+                        family's wrap-up figure and above, see
+                        Checkpoints below) returns
                         {"decision": "block", "reason": <context warning>},
                         forcing exactly one more turn so the warning reaches
-                        the agent. Sub-actionable crossings never block (never
+                        the agent. The advisory crossing never blocks (never
                         force a turn for information).
   SubagentStop       -> turn-end: same as Stop, measured on the agent's own
                         transcript like every other agent-scoped event.
@@ -52,7 +54,7 @@ context.md, K:68-71). Rules, in order:
 
 Advisory plus instruction (2026-07-21; scope-aware since 2026-09-11):
 every message reports the figure, the threshold, and the resulting
-implication for reasoning quality; the ACTIONABLE (>= 200k) messages
+implication for reasoning quality; the ACTIONABLE messages (levels 1-3)
 additionally carry the baseline instruction, chosen by scope because the
 hook knows whose context it measured and no agent should have to
 translate "/handover":
@@ -60,10 +62,10 @@ translate "/handover":
   agent scope - finish the step you are in, record your state, and end
                 your turn per your pause protocol so a fresh agent can
                 continue
-escalating to "stop immediately" at 250k/300k, and at 300k noting that
+escalating to "stop immediately" at levels 2-3, and at level 3 noting that
 work quality may have been compromised. Agent-scoped messages never
 contain "/handover"; main-scoped actionable messages always do. The
-sub-actionable 100k checkpoint stays advisory-only in both scopes. What
+advisory checkpoint (level 0) stays advisory-only in both scopes. What
 "pause protocol" means lives in the agent definition's own protocol; the
 hook's instruction is the baseline, not the full protocol.
 
@@ -90,15 +92,33 @@ Loop safety: a blocked turn-end forces one more turn whose own Stop fires
 with stop_hook_active=true - the hook exits immediately on that flag. The
 once-per-threshold state prevents re-announcing the same threshold.
 
-Checkpoints (cumulative tokens):
-  100,000  - informational only. Left the 0-100k prime-thinking zone.
-  200,000  - ACTIONABLE: also delivered via the turn-end block. Instructs
-             the scope's baseline (main: wrap up + /handover; agent:
-             finish the step, record state, end the turn per the pause
-             protocol).
-  250,000  - ACTIONABLE: as 200k, prefixed "stop immediately".
-  300,000  - ACTIONABLE: as 250k, plus note that work quality may have
-             been compromised.
+Checkpoints (cumulative tokens) - per model family since 2026-09-20
+(docs/superpowers/specs/2026-09-20-per-model-context-checkpoints-design.md,
+ruled by Martin). Four levels; the wording is per level, the figure per
+family:
+
+  level 0 advisory   - informational only. Left the prime-thinking zone.
+  level 1 wrap-up    - ACTIONABLE: also delivered via the turn-end block.
+                       Instructs the scope's baseline (main: wrap up +
+                       /handover; agent: finish the step, record state,
+                       end the turn per the pause protocol).
+  level 2 stop       - ACTIONABLE: as level 1, prefixed "stop immediately".
+  level 3 stop,      - ACTIONABLE: as level 2, plus note that work quality
+          compromised  may have been compromised.
+
+                   level 0    level 1    level 2    level 3
+  Sonnet, Haiku     75,000    150,000    200,000    250,000
+  Opus             100,000    200,000    250,000    300,000
+  Fable, Mythos    200,000    300,000    400,000    450,000
+
+The family is the word after "claude-" in message.model of the same latest
+assistant entry that supplies the usage, so a mid-session model switch and
+an agent's own model are both followed. Haiku takes the Sonnet figures
+(spec assumption). Absent model: Opus figures, silently. Unknown family:
+Opus figures with a breadcrumb naming the id - a new family is transcript
+drift worth surfacing. Non-string model: treated as absent, breadcrumbed.
+The state file stores the announced figure, so a family switch mid-session
+degrades gracefully: an already-announced higher figure is never repeated.
 
 State files (one JSON per measurement identity):
   main loop:  ~/.claude/hooks/state/context-usage-<session_id>.json
@@ -112,7 +132,8 @@ State files (one JSON per measurement identity):
 Reset: if current usage falls below 50% of any previously announced threshold
 (e.g. after /compact or /rewind), all tracked thresholds reset - and the
 reset is persisted immediately, so turn-end detection (which announces
-nothing below 200k that could piggyback persistence) re-arms too.
+nothing below the wrap-up figure that could piggyback persistence)
+re-arms too.
 
 Accepted residual (per-wake re-warning, Spike 9 2026-06-06): the harness
 assigns every teammate WAKE a fresh agent_id and a fresh wake transcript,
@@ -149,35 +170,64 @@ from pathlib import Path
 SCOPE_MAIN = "main"
 SCOPE_AGENT = "agent"
 
-# Message composition. Every checkpoint message is: advisory (figure is
-# prepended by main(); then "Context checkpoint <label> crossed" and the
+# Checkpoint levels (spec 2026-09-20 section 2). The wording is per level;
+# the figure per model family. Every checkpoint message is: advisory (figure
+# is prepended by main(); then "Context checkpoint <label> crossed" and the
 # implication for reasoning quality), the turn-end note when the message
 # is delivered by a forced turn, then the instruction chosen by SCOPE - the
 # hook knows whose context it measured, and no agent should have to
-# translate "/handover" into its own pause protocol. 100k carries no
+# translate "/handover" into its own pause protocol. Level 0 carries no
 # instruction in either scope: it is context, not a directive.
-CHECKPOINTS = (100_000, 200_000, 250_000, 300_000)
-# >=200k: the instruction is carried, and turn-end events may block. 100k is
-# deliberately absent: never force a turn for a sub-actionable checkpoint.
-ACTIONABLE_CHECKPOINTS = (200_000, 250_000, 300_000)
+LEVEL_ADVISORY = 0
+LEVEL_WRAP_UP = 1
+LEVEL_STOP = 2
+LEVEL_STOP_COMPROMISED = 3
+LEVELS = (LEVEL_ADVISORY, LEVEL_WRAP_UP, LEVEL_STOP, LEVEL_STOP_COMPROMISED)
+# Levels 1-3 carry the instruction, and turn-end events may block. Level 0
+# is deliberately absent: never force a turn for an advisory checkpoint.
+ACTIONABLE_LEVELS = (LEVEL_WRAP_UP, LEVEL_STOP, LEVEL_STOP_COMPROMISED)
 
-LABELS = {100_000: "100k", 200_000: "200k", 250_000: "250k", 300_000: "300k"}
+# Figures per model family, indexed by level (spec section 2).
+FAMILY_SONNET = "sonnet"
+FAMILY_OPUS = "opus"
+FAMILY_FABLE = "fable"
+FIGURES_BY_FAMILY = {
+    FAMILY_SONNET: (75_000, 150_000, 200_000, 250_000),
+    FAMILY_OPUS: (100_000, 200_000, 250_000, 300_000),
+    FAMILY_FABLE: (200_000, 300_000, 400_000, 450_000),
+}
+# Opus keeps the pre-2026-09-20 figures, so a transcript with no readable
+# model id behaves exactly as before.
+DEFAULT_FAMILY = FAMILY_OPUS
+
+# The word after "claude-" in the model id names the family (spec section
+# 3): matching that word, not the exact id, survives provider prefixes,
+# dated suffixes and the "[1m]" suffix. Mythos shares Fable's figures; Haiku
+# takes Sonnet's (spec section 3 assumption, flagged there).
+MODEL_WORD = re.compile(r"claude-([a-z]+)")
+FAMILY_BY_MODEL_WORD = {
+    "sonnet": FAMILY_SONNET,
+    "haiku": FAMILY_SONNET,
+    "opus": FAMILY_OPUS,
+    "fable": FAMILY_FABLE,
+    "mythos": FAMILY_FABLE,
+}
 
 IMPLICATIONS = {
-    100_000: (
-        "The first 100k tokens - the highest-quality reasoning zone - are "
+    LEVEL_ADVISORY: (
+        "The first {label} tokens - the highest-quality reasoning zone - are "
         "consumed."
     ),
-    200_000: (
+    LEVEL_WRAP_UP: (
         "You are well past the peak-quality reasoning zone - recall of "
         "earlier context is less reliable and multi-step reasoning is more "
         "error-prone than at the start."
     ),
-    250_000: (
+    LEVEL_STOP: (
         "Reasoning quality is significantly degraded - earlier context is "
         "increasingly likely to be missed, misremembered, or contradicted."
     ),
-    300_000: (
+    LEVEL_STOP_COMPROMISED: (
         "Reasoning quality is severely degraded - expect dropped context, "
         "overlooked instructions, and inconsistent output."
     ),
@@ -185,31 +235,31 @@ IMPLICATIONS = {
 
 INSTRUCTIONS = {
     SCOPE_MAIN: {
-        200_000: (
+        LEVEL_WRAP_UP: (
             "Wrap up your current work and use /handover to continue in a "
             "fresh session."
         ),
-        250_000: (
+        LEVEL_STOP: (
             "Stop immediately: wrap up and use /handover to continue in a "
             "fresh session."
         ),
-        300_000: (
+        LEVEL_STOP_COMPROMISED: (
             "Stop immediately: wrap up and use /handover to continue in a "
             "fresh session, noting in the handover that work quality may "
             "have been compromised."
         ),
     },
     SCOPE_AGENT: {
-        200_000: (
+        LEVEL_WRAP_UP: (
             "Finish the step you are in, record your state, and end your "
             "turn per your pause protocol so a fresh agent can continue."
         ),
-        250_000: (
+        LEVEL_STOP: (
             "Stop immediately: finish the step you are in, record your "
             "state, and end your turn per your pause protocol so a fresh "
             "agent can continue."
         ),
-        300_000: (
+        LEVEL_STOP_COMPROMISED: (
             "Stop immediately: finish the step you are in, record your "
             "state, and end your turn per your pause protocol so a fresh "
             "agent can continue, noting in your recorded state that work "
@@ -225,15 +275,53 @@ INSTRUCTIONS = {
 TURN_END_NOTE = "This turn was forced so the warning could reach you."
 
 
-def checkpoint_message(threshold: int, scope: str, turn_end: bool) -> str:
+@dataclass(frozen=True)
+class Checkpoint:
+    """One crossing candidate: a level and the family's figure for it."""
+
+    level: int
+    figure: int
+
+    @property
+    def label(self) -> str:
+        return f"{self.figure // 1000}k"
+
+
+def figure_family(model: object) -> str:
+    """The figure family for a transcript's model id (spec section 3).
+    Absent -> default silently (absent fields are normal shape). Non-string
+    -> treated as absent with the malformed-input breadcrumb. Unknown family
+    word -> default with a breadcrumb naming the id: a new family is the
+    transcript drift this hook's breadcrumbs exist to surface."""
+    if model is None:
+        return DEFAULT_FAMILY
+    if not isinstance(model, str):
+        warn("non-string transcript field 'model' treated as absent")
+        return DEFAULT_FAMILY
+    match = MODEL_WORD.search(model)
+    family = FAMILY_BY_MODEL_WORD.get(match.group(1)) if match else None
+    if family is None:
+        warn(f"unknown model family in {model!r} - using the {DEFAULT_FAMILY} figures")
+        return DEFAULT_FAMILY
+    return family
+
+
+def checkpoints_for(family: str, turn_end: bool) -> tuple[Checkpoint, ...]:
+    """The family's checkpoints this event may announce, ascending."""
+    figures = FIGURES_BY_FAMILY[family]
+    levels = ACTIONABLE_LEVELS if turn_end else LEVELS
+    return tuple(Checkpoint(level, figures[level]) for level in levels)
+
+
+def checkpoint_message(checkpoint: Checkpoint, scope: str, turn_end: bool) -> str:
     detection = " (turn-end detection)" if turn_end else ""
+    implication = IMPLICATIONS[checkpoint.level].format(label=checkpoint.label)
     parts = [
-        f"Context checkpoint {LABELS[threshold]} crossed{detection}. "
-        f"{IMPLICATIONS[threshold]}"
+        f"Context checkpoint {checkpoint.label} crossed{detection}. {implication}"
     ]
     if turn_end:
         parts.append(TURN_END_NOTE)
-    instruction = INSTRUCTIONS[scope].get(threshold)
+    instruction = INSTRUCTIONS[scope].get(checkpoint.level)
     if instruction:
         parts.append(instruction)
     return " ".join(parts)
@@ -292,15 +380,43 @@ def str_field(payload: dict, field: str) -> str | None:
     return None
 
 
+# The four flat usage fields that make up a context measurement. When a
+# usage object carries an "iterations" array these flat fields hold the LAST
+# iteration's figures, which is what we want; the nested "cache_creation"
+# object can disagree with them on a model-refusal fallback turn, so it is
+# never read (spec 2026-09-20 section 8).
+USAGE_FIELDS = (
+    "input_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "output_tokens",
+)
+
+# The harness writes placeholder assistant entries - "No response requested.",
+# a session-limit notice - under this model name, always with all four token
+# fields zero. They are not API responses and carry no measurement.
+SYNTHETIC_MODEL = "<synthetic>"
+
+
+def is_placeholder(message: dict) -> bool:
+    """True for a harness placeholder rather than a real API response (spec
+    2026-09-20 section 8): the synthetic model, or a usage object whose four
+    token fields are all zero or absent. Measuring one reads zero and
+    silently stops the warnings for the rest of the session - observed as the
+    last entry in 14 of 617 main transcripts."""
+    if message.get("model") == SYNTHETIC_MODEL:
+        return True
+    usage = message["usage"]
+    return not any(
+        isinstance(usage.get(field), (int, float)) and usage.get(field)
+        for field in USAGE_FIELDS
+    )
+
+
 def total_tokens(usage: dict) -> int:
     total = 0
     non_numeric = []
-    for field in (
-        "input_tokens",
-        "cache_creation_input_tokens",
-        "cache_read_input_tokens",
-        "output_tokens",
-    ):
+    for field in USAGE_FIELDS:
         value = usage.get(field)
         if isinstance(value, (int, float)):
             total += value
@@ -430,12 +546,15 @@ def measurement_target(payload: dict, event_name: str) -> Target | None:
     return None
 
 
-def latest_main_thread_usage(
+def latest_assistant_message(
     transcript: Path, include_sidechain: bool = False
 ) -> dict | None:
-    """Latest assistant usage dict in the transcript. Sidechain entries are
-    skipped unless include_sidechain (agent transcripts are wholly
-    sidechain-flagged, so the filter would blind the read there)."""
+    """Latest assistant message dict that is a real API response. The usage
+    figure and the model id are both read from this one entry (spec
+    2026-09-20 section 3); harness placeholders are skipped so a trailing one
+    cannot silence the hook (section 8). Sidechain entries are skipped unless
+    include_sidechain (agent transcripts are wholly sidechain-flagged, so
+    the filter would blind the read there)."""
     latest = None
     malformed = 0
     try:
@@ -457,9 +576,8 @@ def latest_main_thread_usage(
                     if msg is not None:  # absent message is normal shape
                         malformed += 1
                     continue
-                usage = msg.get("usage")
-                if isinstance(usage, dict):
-                    latest = usage
+                if isinstance(msg.get("usage"), dict) and not is_placeholder(msg):
+                    latest = msg
     except Exception:
         return None
     if malformed:
@@ -467,22 +585,24 @@ def latest_main_thread_usage(
     return latest
 
 
-def highest_crossing(thresholds, current, announced) -> int | None:
-    """The highest threshold at/below current that exceeds what this state
-    key already announced, or None."""
-    crossed = [t for t in thresholds if current >= t]
+def highest_crossing(
+    checkpoints: tuple[Checkpoint, ...], current: int, announced: int
+) -> Checkpoint | None:
+    """The highest checkpoint at/below current whose figure exceeds what
+    this state key already announced, or None."""
+    crossed = [c for c in checkpoints if current >= c.figure]
     if not crossed:
         return None
-    threshold = crossed[-1]
-    return None if threshold <= announced else threshold
+    top = crossed[-1]
+    return None if top.figure <= announced else top
 
 
-def informational_already_announced(state: dict, threshold: int) -> bool:
+def informational_already_announced(state: dict, figure: int) -> bool:
     """Turn-end addendum (spec 5.1, 2026-09-11): the block is only a delivery
-    channel. If the prompt or tool channel already delivered this threshold
+    channel. If the prompt or tool channel already delivered this figure
     to this identity mid-turn, forcing a turn would deliver it twice and
     cost the agent a wasted turn per pause."""
-    return max(state[STATE_KEY_PROMPT], state[STATE_KEY_TOOL]) >= threshold
+    return max(state[STATE_KEY_PROMPT], state[STATE_KEY_TOOL]) >= figure
 
 
 def main() -> int:
@@ -509,18 +629,20 @@ def main() -> int:
     if not target.transcript.exists():
         return 0
 
-    usage = latest_main_thread_usage(
+    message = latest_assistant_message(
         target.transcript, include_sidechain=target.include_sidechain
     )
-    if not usage:
+    if not message:
         return 0
 
-    current = total_tokens(usage)
+    current = total_tokens(message["usage"])
+    family = figure_family(message.get("model"))
     state = load_state(target.state_id)
 
     # Reset on significant backwards jump (compact, rewind, fresh transcript).
-    # Persist immediately: the turn-end path announces nothing below 200k, so
-    # without persistence a post-compact session would stay silenced.
+    # Persist immediately: the turn-end path announces nothing below the
+    # family's wrap-up figure, so without persistence a post-compact session
+    # would stay silenced.
     max_tracked = max(state[k] for k in STATE_KEYS)
     if max_tracked > 0 and current < max_tracked * RESET_RATIO:
         for k in STATE_KEYS:
@@ -528,19 +650,20 @@ def main() -> int:
         save_state(target.state_id, state)
 
     key = EVENT_STATE_KEYS.get(event_name, STATE_KEY_PROMPT)
-    thresholds = ACTIONABLE_CHECKPOINTS if turn_end else CHECKPOINTS
-    threshold = highest_crossing(thresholds, current, state[key])
-    if threshold is None:
+    crossing = highest_crossing(
+        checkpoints_for(family, turn_end), current, state[key]
+    )
+    if crossing is None:
         return 0
 
-    if turn_end and informational_already_announced(state, threshold):
+    if turn_end and informational_already_announced(state, crossing.figure):
         return 0
 
-    state[key] = threshold
+    state[key] = crossing.figure
     save_state(target.state_id, state)
 
-    message = checkpoint_message(threshold, target.scope, turn_end)
-    full_msg = f"[{current:,} tokens used] {message}"
+    warning = checkpoint_message(crossing, target.scope, turn_end)
+    full_msg = f"[{current:,} tokens used] {warning}"
     if turn_end:
         print(json.dumps({"decision": "block", "reason": full_msg}))
     else:
