@@ -10,6 +10,11 @@
 # tests, and ~/.claude/statusline.sh. Family aliasing lives in code (spec
 # section 3): Haiku takes sonnet's row, Mythos takes fable's, an unreadable
 # model id takes opus's.
+#
+# opus row set equal to fable's, ruled by Martin 2026-09-24 for Opus 5.5:
+# "I would match fable's numbers for now. I want to be conservative until
+# we've seen how long context sized pan out". The row covers every
+# claude-opus-* model and the unreadable-model fallback.
 sonnet   75000 150000 200000 250000
-opus    100000 200000 250000 300000
+opus    200000 300000 400000 450000
 fable   200000 300000 400000 450000
