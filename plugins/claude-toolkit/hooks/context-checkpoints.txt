@@ -15,6 +15,10 @@
 # "I would match fable's numbers for now. I want to be conservative until
 # we've seen how long context sized pan out". The row covers every
 # claude-opus-* model and the unreadable-model fallback.
-sonnet   75000 150000 200000 250000
+#
+# sonnet row raised by 100000 at every checkpoint, ruled by Martin 2026-10-08:
+# "All thresholds increased by 100k." The row covers every claude-sonnet-*
+# model and, through the aliasing above, Haiku.
+sonnet  175000 250000 300000 350000
 opus    200000 300000 400000 450000
 fable   200000 300000 400000 450000
